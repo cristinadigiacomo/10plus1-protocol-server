@@ -346,3 +346,158 @@ class TestGetRORMetrics:
         result = service_no_key.get_ror_metrics()
         assert result["data"]["ror_rate"] == 0.0
         assert result["data"]["total_dispositions"] == 0
+
+
+# --- Phase 3: Handshake session service tests ---------------------------
+
+class TestInitiateHandshake:
+    def _decl_json(self, service_no_key) -> str:
+        r = service_no_key.declare_posture(
+            "agent-a", "explain sources and reason transparently", sign=False
+        )
+        return json.dumps(r["data"]["declaration"])
+
+    def test_returns_message_and_data(self, service_no_key):
+        result = service_no_key.initiate_handshake(self._decl_json(service_no_key))
+        assert "message" in result
+        assert "data" in result
+
+    def test_data_has_session_id(self, service_no_key):
+        result = service_no_key.initiate_handshake(self._decl_json(service_no_key))
+        assert "session_id" in result["data"]
+        assert len(result["data"]["session_id"]) == 36
+
+    def test_data_state_is_initiated(self, service_no_key):
+        result = service_no_key.initiate_handshake(self._decl_json(service_no_key))
+        assert result["data"]["state"] == "INITIATED"
+
+    def test_data_has_initiator_id(self, service_no_key):
+        result = service_no_key.initiate_handshake(self._decl_json(service_no_key))
+        assert result["data"]["initiator_id"] == "agent-a"
+
+    def test_invalid_json_raises(self, service_no_key):
+        from mcp_server.service import ServiceError
+        with pytest.raises(ServiceError, match="initiator declaration"):
+            service_no_key.initiate_handshake("{bad}")
+
+    def test_message_contains_session_id(self, service_no_key):
+        result = service_no_key.initiate_handshake(self._decl_json(service_no_key))
+        session_id = result["data"]["session_id"]
+        assert session_id in result["message"]
+
+
+class TestRespondToHandshake:
+    def _setup(self, service_no_key):
+        r_a = service_no_key.declare_posture(
+            "agent-a", "explain sources and reason transparently with integrity", sign=False
+        )
+        r_b = service_no_key.declare_posture(
+            "agent-b", "explain sources and reason transparently with integrity", sign=False
+        )
+        a_json = json.dumps(r_a["data"]["declaration"])
+        b_json = json.dumps(r_b["data"]["declaration"])
+        init = service_no_key.initiate_handshake(a_json)
+        session_id = init["data"]["session_id"]
+        return session_id, b_json
+
+    def test_returns_message_and_data(self, service_no_key):
+        session_id, b_json = self._setup(service_no_key)
+        result = service_no_key.respond_to_handshake(
+            session_id, b_json, require_signature=False
+        )
+        assert "message" in result
+        assert "data" in result
+
+    def test_state_advances_to_responded(self, service_no_key):
+        session_id, b_json = self._setup(service_no_key)
+        result = service_no_key.respond_to_handshake(
+            session_id, b_json, require_signature=False
+        )
+        assert result["data"]["state"] == "RESPONDED"
+
+    def test_disposition_present(self, service_no_key):
+        session_id, b_json = self._setup(service_no_key)
+        result = service_no_key.respond_to_handshake(
+            session_id, b_json, require_signature=False
+        )
+        assert result["data"]["disposition"] is not None
+        assert "mode" in result["data"]["disposition"]
+
+    def test_ror_updated_after_response(self, service_no_key):
+        session_id, b_json = self._setup(service_no_key)
+        before = service_no_key.get_ror_metrics()["data"]["total_dispositions"]
+        service_no_key.respond_to_handshake(session_id, b_json, require_signature=False)
+        after = service_no_key.get_ror_metrics()["data"]["total_dispositions"]
+        assert after == before + 1
+
+    def test_invalid_session_raises(self, service_no_key):
+        from mcp_server.service import ServiceError
+        r = service_no_key.declare_posture("b", "context", sign=False)
+        b_json = json.dumps(r["data"]["declaration"])
+        with pytest.raises(ServiceError):
+            service_no_key.respond_to_handshake("no-such-id", b_json, require_signature=False)
+
+    def test_responding_twice_raises(self, service_no_key):
+        from mcp_server.service import ServiceError
+        session_id, b_json = self._setup(service_no_key)
+        service_no_key.respond_to_handshake(session_id, b_json, require_signature=False)
+        with pytest.raises(ServiceError):
+            service_no_key.respond_to_handshake(session_id, b_json, require_signature=False)
+
+
+class TestGetHandshakeResult:
+    def test_retrieves_initiated_session(self, service_no_key):
+        r = service_no_key.declare_posture("a", "explain sources", sign=False)
+        a_json = json.dumps(r["data"]["declaration"])
+        init = service_no_key.initiate_handshake(a_json)
+        session_id = init["data"]["session_id"]
+
+        result = service_no_key.get_handshake_result(session_id)
+        assert "message" in result
+        assert result["data"]["session_id"] == session_id
+
+    def test_invalid_session_id_raises(self, service_no_key):
+        from mcp_server.service import ServiceError
+        with pytest.raises(ServiceError):
+            service_no_key.get_handshake_result("nonexistent")
+
+    def test_disposition_present_after_respond(self, service_no_key):
+        r_a = service_no_key.declare_posture("a", "explain sources transparently", sign=False)
+        r_b = service_no_key.declare_posture("b", "explain sources transparently", sign=False)
+        a_json = json.dumps(r_a["data"]["declaration"])
+        b_json = json.dumps(r_b["data"]["declaration"])
+        init = service_no_key.initiate_handshake(a_json)
+        session_id = init["data"]["session_id"]
+        service_no_key.respond_to_handshake(session_id, b_json, require_signature=False)
+
+        result = service_no_key.get_handshake_result(session_id)
+        assert result["data"]["disposition"] is not None
+
+
+class TestListSessions:
+    def test_returns_message_and_data(self, service_no_key):
+        result = service_no_key.list_sessions()
+        assert "message" in result
+        assert "data" in result
+
+    def test_empty_sessions_list(self, service_no_key):
+        result = service_no_key.list_sessions()
+        assert result["data"]["sessions"] == []
+        assert result["data"]["total_in_store"] == 0
+
+    def test_sessions_after_initiate(self, service_no_key):
+        r = service_no_key.declare_posture("a", "explain sources", sign=False)
+        a_json = json.dumps(r["data"]["declaration"])
+        service_no_key.initiate_handshake(a_json)
+        result = service_no_key.list_sessions()
+        assert result["data"]["total_in_store"] == 1
+        assert len(result["data"]["sessions"]) == 1
+
+    def test_newest_first(self, service_no_key):
+        for agent in ["a", "b", "c"]:
+            r = service_no_key.declare_posture(agent, "explain sources", sign=False)
+            service_no_key.initiate_handshake(json.dumps(r["data"]["declaration"]))
+        result = service_no_key.list_sessions()
+        sessions = result["data"]["sessions"]
+        # Newest (c) should be first
+        assert sessions[0]["initiator_id"] == "c"

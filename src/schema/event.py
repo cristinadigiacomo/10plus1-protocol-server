@@ -80,6 +80,12 @@ class EventID:
     SERVER_TOOL_ERROR          = 7402
     SERVER_TOOL_CALL           = 7403
 
+    # Handshake sessions (within SERVER range)
+    HANDSHAKE_INITIATED        = 7410
+    HANDSHAKE_RESPONDED        = 7411
+    HANDSHAKE_COMPLETE         = 7412
+    HANDSHAKE_FAILED           = 7413
+
 
 class ProtocolEvent(BaseModel):
     """A single dual-channel Protocol event for Windows Event Log."""

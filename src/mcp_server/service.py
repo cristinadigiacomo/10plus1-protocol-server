@@ -1,10 +1,11 @@
 """
-Phase 2 — Protocol service layer.
+Phase 3 — Protocol service layer.
 
-Extends Phase 1 with disposition engine methods:
-  validate_counterpart_declaration()
-  get_disposition()
-  get_ror_metrics()
+Extends Phase 2 with handshake session methods:
+  initiate_handshake()
+  respond_to_handshake()
+  get_handshake_result()
+  list_sessions()
 
 All business logic lives here. No logic in app.py.
 
@@ -12,7 +13,7 @@ Authoritative sources
 ---------------------
 PATTERNS.md PATTERN-004 (service layer separation)
 DECISIONS.md DEC-008 (dual-channel response)
-PHASES/PHASE_2.md
+PHASES/PHASE_3.md
 """
 
 from __future__ import annotations
@@ -28,6 +29,12 @@ from declaration.builder import build as build_declaration
 from declaration.embedder import embed, embed_minimal
 from dispositioner.engine import compute_disposition
 from dispositioner.ror_tracker import RORTracker
+from handshake.manager import (
+    HandshakeManager,
+    SessionNotFoundError,
+    SessionStateError,
+)
+from handshake.session import SessionState
 from schema.declaration import HandshakeDeclaration
 from schema.disposition import DispositionMode
 from schema.event import EventID, ProtocolCategory, ProtocolEvent
@@ -81,6 +88,7 @@ class ProtocolService:
         self._key: bytes | None = None
         self._event_count = 0
         self._ror = RORTracker(window_size=ror_window)
+        self._handshake = HandshakeManager()
 
     # --- Key management --------------------------------------------------
 
@@ -384,6 +392,10 @@ class ProtocolService:
                     "validate_counterpart",
                     "get_disposition",
                     "get_ror_metrics",
+                    "initiate_handshake",
+                    "respond_to_handshake",
+                    "get_handshake_result",
+                    "list_sessions",
                     "get_server_info",
                 ],
             },
@@ -588,21 +600,14 @@ class ProtocolService:
         }
 
     def get_ror_metrics(self) -> dict[str, Any]:
-        """Return the current ROR (Refused-Or-Rerouted) metrics for this session.
-
-        Returns
-        -------
-        dict with keys: message, data
-        """
+        """Return the current ROR (Refused-Or-Rerouted) metrics for this session."""
         summary = self._ror.summary()
         counts = self._ror.counts()
         rate = self._ror.ror_rate()
         total = self._ror.total()
 
-        message = f"ROR metrics — {summary}"
-
         return {
-            "message": message,
+            "message": f"ROR metrics — {summary}",
             "data": {
                 "ror_rate": rate,
                 "total_dispositions": total,
@@ -613,5 +618,220 @@ class ProtocolService:
                     "High ROR: posture design gap or genuine alignment problem. "
                     "Both extremes warrant investigation."
                 ),
+            },
+        }
+
+    # --- Phase 3: Handshake session methods ------------------------------
+
+    def initiate_handshake(
+        self,
+        self_declaration_json: str,
+    ) -> dict[str, Any]:
+        """Create a new handshake session as the initiating agent.
+
+        Agent A submits its own signed declaration. A session_id is returned
+        that Agent B must use when calling respond_to_handshake().
+
+        Parameters
+        ----------
+        self_declaration_json : str
+            JSON string of the initiating agent's HandshakeDeclaration.
+
+        Returns
+        -------
+        dict with keys: message, data (session_id, session state)
+        """
+        try:
+            raw = json.loads(self_declaration_json)
+            initiator_decl = HandshakeDeclaration.model_validate(raw)
+        except (json.JSONDecodeError, ValueError) as exc:
+            raise ServiceError(f"Invalid initiator declaration JSON: {exc}") from exc
+
+        session = self._handshake.create(initiator_decl)
+
+        self._log(
+            EventID.HANDSHAKE_INITIATED,
+            ProtocolCategory.SERVER,
+            initiator_decl.agent_id,
+            f"Handshake initiated by '{initiator_decl.agent_id}' — "
+            f"session {session.session_id[:8]}… | "
+            f"declaration coverage: {initiator_decl.coverage():.1%}",
+            data={
+                "session_id": session.session_id,
+                "initiator_id": initiator_decl.agent_id,
+            },
+            declaration_id=initiator_decl.id,
+        )
+
+        return {
+            "message": (
+                f"Handshake initiated by '{initiator_decl.agent_id}'. "
+                f"Session ID: {session.session_id}. "
+                f"Share this session_id with the counterpart agent and ask them "
+                f"to call respond_to_handshake()."
+            ),
+            "data": {
+                "session_id":   session.session_id,
+                "state":        session.state.value,
+                "initiator_id": session.initiator_id,
+                "initiated_at": session.initiated_at,
+                "initiator_declaration_id": initiator_decl.id,
+                "initiator_coverage": initiator_decl.coverage(),
+            },
+        }
+
+    def respond_to_handshake(
+        self,
+        session_id: str,
+        counterpart_declaration_json: str,
+        require_signature: bool = True,
+    ) -> dict[str, Any]:
+        """Respond to an open handshake session as the counterpart agent.
+
+        Agent B submits its declaration. The engine computes disposition
+        immediately and the session advances to RESPONDED.
+
+        Parameters
+        ----------
+        session_id : str
+            The session_id from initiate_handshake().
+        counterpart_declaration_json : str
+            JSON string of the counterpart's HandshakeDeclaration.
+        require_signature : bool
+            If True, unsigned counterpart declaration → disposition REFUSE.
+
+        Returns
+        -------
+        dict with keys: message, data (full session with disposition)
+        """
+        try:
+            raw = json.loads(counterpart_declaration_json)
+            counterpart_decl = HandshakeDeclaration.model_validate(raw)
+        except (json.JSONDecodeError, ValueError) as exc:
+            raise ServiceError(f"Invalid counterpart declaration JSON: {exc}") from exc
+
+        try:
+            session = self._handshake.respond(
+                session_id, counterpart_decl, require_signature=require_signature
+            )
+        except SessionNotFoundError as exc:
+            raise ServiceError(str(exc)) from exc
+        except SessionStateError as exc:
+            raise ServiceError(str(exc)) from exc
+
+        # Record in ROR tracker
+        if session.disposition:
+            self._ror.record(session.disposition.mode)
+
+        ev_id = (
+            EventID.HANDSHAKE_FAILED
+            if session.is_failed()
+            else EventID.HANDSHAKE_RESPONDED
+        )
+        mode_str = session.disposition.mode.value if session.disposition else "FAILED"
+
+        self._log(
+            ev_id,
+            ProtocolCategory.SERVER,
+            counterpart_decl.agent_id,
+            (
+                f"Handshake {session.session_id[:8]}… responded by "
+                f"'{counterpart_decl.agent_id}' → {mode_str} | "
+                f"score={session.disposition.alignment_score:.2f}"
+                if session.disposition
+                else f"Handshake {session.session_id[:8]}… FAILED: {session.error}"
+            ),
+            data={
+                "session_id":   session.session_id,
+                "mode":         mode_str,
+                "counterpart_id": counterpart_decl.agent_id,
+            },
+            declaration_id=counterpart_decl.id,
+        )
+
+        if session.is_failed():
+            return {
+                "message": (
+                    f"Handshake {session.session_id[:8]}… FAILED. "
+                    f"Error: {session.error}"
+                ),
+                "data": session.to_dict(),
+            }
+
+        disp = session.disposition
+        message = (
+            f"Handshake {session.session_id[:8]}… complete. "
+            f"Disposition: {disp.mode.value} "
+            f"(alignment {disp.alignment_score:.1%}). "
+            f"ROR rate: {self._ror.ror_rate():.1%}."
+        )
+        if disp.recommended_action:
+            message += f" Action: {disp.recommended_action}"
+
+        return {
+            "message": message,
+            "data": session.to_dict(),
+        }
+
+    def get_handshake_result(self, session_id: str) -> dict[str, Any]:
+        """Retrieve a handshake session by ID.
+
+        Parameters
+        ----------
+        session_id : str
+
+        Returns
+        -------
+        dict with keys: message, data (full session record)
+        """
+        try:
+            session = self._handshake.get(session_id)
+        except SessionNotFoundError as exc:
+            raise ServiceError(str(exc)) from exc
+
+        self._log(
+            EventID.HANDSHAKE_COMPLETE,
+            ProtocolCategory.SERVER,
+            session.initiator_id,
+            f"Handshake {session.session_id[:8]}… retrieved — state={session.state.value}",
+            data={"session_id": session.session_id, "state": session.state.value},
+        )
+
+        return {
+            "message": f"Session {session.session_id[:8]}…: {session.summary()}",
+            "data": session.to_dict(),
+        }
+
+    def list_sessions(self, n: int = 20) -> dict[str, Any]:
+        """List the most recent handshake sessions.
+
+        Parameters
+        ----------
+        n : int
+            Maximum number of sessions to return (default 20).
+
+        Returns
+        -------
+        dict with keys: message, data (list of session summaries)
+        """
+        sessions = self._handshake.list_recent(n)
+        total = self._handshake.total()
+
+        state_counts: dict[str, int] = {s.value: 0 for s in SessionState}
+        for sess in sessions:
+            state_counts[sess.state.value] += 1
+
+        return {
+            "message": (
+                f"{total} session(s) in store. "
+                f"Showing {len(sessions)} most recent. "
+                f"INITIATED={state_counts['INITIATED']} "
+                f"RESPONDED={state_counts['RESPONDED']} "
+                f"COMPLETE={state_counts['COMPLETE']} "
+                f"FAILED={state_counts['FAILED']}."
+            ),
+            "data": {
+                "total_in_store": total,
+                "sessions": [s.to_dict() for s in sessions],
             },
         }

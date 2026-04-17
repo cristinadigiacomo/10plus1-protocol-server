@@ -194,6 +194,83 @@ def build_app(service: ProtocolService) -> FastMCP:
     def get_ror_metrics() -> dict[str, Any]:
         return service.get_ror_metrics()
 
+    # --- Phase 3 tools ---------------------------------------------------
+
+    @app.tool(
+        description=(
+            "Start a new AI↔AI handshake session as the initiating agent. "
+            "Submit your own signed declaration and receive a session_id. "
+            "Share the session_id with the counterpart agent so they can call "
+            "respond_to_handshake() to complete the exchange. "
+            "Pass the declaration JSON from declare_posture."
+        )
+    )
+    def initiate_handshake(self_declaration_json: str) -> dict[str, Any]:
+        """
+        self_declaration_json : JSON of your own declaration (from declare_posture).
+        """
+        try:
+            return service.initiate_handshake(self_declaration_json)
+        except ServiceError as exc:
+            return {"message": f"Error: {exc}", "data": {"error": str(exc)}}
+
+    @app.tool(
+        description=(
+            "Respond to an open handshake session as the counterpart agent. "
+            "Submit your own declaration and the Protocol engine immediately computes "
+            "the disposition (PROCEED/REROUTE/COMPLETE_AND_FLAG/REFUSE). "
+            "Requires the session_id from the initiating agent's initiate_handshake call. "
+            "The result updates the session and records the mode in the ROR tracker."
+        )
+    )
+    def respond_to_handshake(
+        session_id: str,
+        counterpart_declaration_json: str,
+        require_signature: bool = True,
+    ) -> dict[str, Any]:
+        """
+        session_id                   : From the initiating agent's initiate_handshake response.
+        counterpart_declaration_json : Your own declaration JSON (from declare_posture).
+        require_signature            : REFUSE if initiator declaration is unsigned (default True).
+        """
+        try:
+            return service.respond_to_handshake(
+                session_id=session_id,
+                counterpart_declaration_json=counterpart_declaration_json,
+                require_signature=require_signature,
+            )
+        except ServiceError as exc:
+            return {"message": f"Error: {exc}", "data": {"error": str(exc)}}
+
+    @app.tool(
+        description=(
+            "Retrieve the full result of a completed handshake session by session_id. "
+            "Returns session state, both declarations, disposition signal, and alignment report. "
+            "Useful for checking the outcome after respond_to_handshake() has been called."
+        )
+    )
+    def get_handshake_result(session_id: str) -> dict[str, Any]:
+        """
+        session_id : The session_id from initiate_handshake.
+        """
+        try:
+            return service.get_handshake_result(session_id)
+        except ServiceError as exc:
+            return {"message": f"Error: {exc}", "data": {"error": str(exc)}}
+
+    @app.tool(
+        description=(
+            "List the most recent handshake sessions in this server session. "
+            "Returns sessions newest-first with state, agents, disposition mode, "
+            "and alignment score. Sessions are in-memory and reset on server restart."
+        )
+    )
+    def list_sessions(n: int = 20) -> dict[str, Any]:
+        """
+        n : Maximum number of sessions to return (default 20).
+        """
+        return service.list_sessions(n)
+
     return app
 
 
