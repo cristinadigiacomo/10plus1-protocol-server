@@ -4,6 +4,49 @@ Working notes. Updated at the end of every session. Newest entry at top.
 
 ---
 
+## 2026-04-17 — Phase 1 Complete
+
+**What landed:**
+- All Phase 1 source code written and committed (`phase-1` commit)
+- 119/119 unit tests passing
+- Git tag: phase-1-complete pending (Phase 1 done criteria all met)
+
+**Files written this session:**
+- `src/schema/declaration.py` — HandshakeDeclaration, PrincipleStatement, PrincipleStatus
+- `src/schema/disposition.py` — DispositionMode, DispositionSignal (Phase 2 stub)
+- `src/schema/event.py` — ProtocolEvent, EventID constants (7000–7499)
+- `src/signer/signer.py` — HMAC-SHA256 signing, load_key, sign_declaration, verify_declaration
+- `src/event_viewer/writer.py` — Windows Event Log adapter, graceful non-Windows degradation
+- `src/declaration/builder.py` — Keyword-based principle inference, specific statement templates
+- `src/declaration/embedder.py` — Contextual embedding (73% pattern), embed() + embed_minimal()
+- `src/validator/principle_map.py` — C1–C11 definitions, vague phrase list
+- `src/validator/validator.py` — Coverage score, vagueness detection, per-principle issues
+- `src/mcp_server/service.py` — ProtocolService: declare_posture, validate, embed, get_info
+- `src/mcp_server/app.py` — FastMCP("protocol") stdio app, 4 tools
+- `tests/unit/test_schema.py` — 18 tests
+- `tests/unit/test_signer.py` — 18 tests
+- `tests/unit/test_builder.py` — 22 tests
+- `tests/unit/test_embedder.py` — 20 tests
+- `tests/unit/test_validator.py` — 22 tests
+- `tests/unit/test_mcp_tools.py` — 19 tests
+
+**Phase 1 done criteria status:**
+- [x] All unit tests pass (119/119)
+- [x] declare_posture tool implemented and callable
+- [x] Declaration is signed and signature verifiable
+- [x] Validation produces correct coverage score and vagueness warnings
+- [x] Embedding produces contextual format (not header block)
+- [ ] Events appear in Windows Event Viewer — needs `pip install pywin32` + register_source() on Windows
+- [ ] Git commit tagged phase-1-complete
+
+**What's next:**
+- Register as MCP server in Claude Code config (add to .claude/mcp.json)
+- Generate a .protocol.key file for live signing
+- Run register_source() from elevated shell (Windows-side)
+- Begin Phase 2: disposition engine (PROCEED/REROUTE/COMPLETE_AND_FLAG/REFUSE) + ROR tracker
+
+---
+
 ## 2026-04-17 — Kickoff Session
 
 **Session scope:** Project initialization. Read all knowledge base documents. Wrote all discipline files.

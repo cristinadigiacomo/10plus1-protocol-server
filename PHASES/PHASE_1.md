@@ -183,12 +183,12 @@ Event ID assignments:
 
 ## Phase 1 Done When
 
-- [ ] All unit tests pass
-- [ ] `declare_posture` tool callable from Claude Code
-- [ ] Declaration is signed and signature verifiable
-- [ ] Validation produces correct coverage score and vagueness warnings
-- [ ] Embedding produces contextual format (not header block)
-- [ ] Events appear in Windows Event Viewer under source `10plus1-Protocol`
+- [x] All unit tests pass — 119/119 (2026-04-17)
+- [ ] `declare_posture` tool callable from Claude Code — needs MCP config + key file
+- [x] Declaration is signed and signature verifiable
+- [x] Validation produces correct coverage score and vagueness warnings
+- [x] Embedding produces contextual format (not header block)
+- [ ] Events appear in Windows Event Viewer under source `10plus1-Protocol` — needs pywin32 + register_source()
 - [ ] Git commit tagged `phase-1-complete`
 
 ---

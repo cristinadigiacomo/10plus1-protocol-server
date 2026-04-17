@@ -153,7 +153,7 @@ class ProtocolService:
                 declaration = sign_declaration(declaration, key)
                 self._log(
                     EventID.DECLARATION_SIGNED,
-                    ProtocolCategory.SIGNING,
+                    ProtocolCategory.DECLARATION,   # 7001 is in 7000–7099 range
                     agent_id,
                     f"Declaration {declaration.id[:8]}… signed for agent '{agent_id}'",
                     data={"declaration_id": declaration.id},
@@ -163,7 +163,7 @@ class ProtocolService:
                 # Key unavailable — return unsigned declaration with a warning
                 self._log(
                     EventID.DECLARATION_SIGNING_FAILED,
-                    ProtocolCategory.SIGNING,
+                    ProtocolCategory.DECLARATION,   # 7002 is in 7000–7099 range
                     agent_id,
                     f"Signing skipped for declaration {declaration.id[:8]}… — key unavailable",
                     declaration_id=declaration.id,
