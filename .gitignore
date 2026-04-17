@@ -26,5 +26,12 @@ htmlcov/
 .DS_Store
 Thumbs.db
 
+# Runtime data (generated at runtime, not source)
+.protocol_journal.jsonl
+.protocol_ror.json
+
+# Temp files
+pending_report.html
+
 # Knowledge base originals (tracked separately)
 # knowledge_base/ is checked in — it's read-only reference material
