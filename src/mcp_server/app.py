@@ -120,12 +120,79 @@ def build_app(service: ProtocolService) -> FastMCP:
     @app.tool(
         description=(
             "Return Protocol server status: phase, version, event count, "
-            "key file presence, and available tools. "
+            "key file presence, available tools, and current ROR metrics. "
             "Call this to verify the server is running correctly."
         )
     )
     def get_server_info() -> dict[str, Any]:
         return service.get_server_info()
+
+    # --- Phase 2 tools ---------------------------------------------------
+
+    @app.tool(
+        description=(
+            "Validate a counterpart agent's HandshakeDeclaration before accepting it. "
+            "Checks schema validity, principle coverage, vagueness warnings, and "
+            "whether the declaration is signed. "
+            "Pass the counterpart's declaration JSON and set require_signature=true "
+            "to enforce that it must be signed."
+        )
+    )
+    def validate_counterpart(
+        counterpart_json: str,
+        require_signature: bool = True,
+    ) -> dict[str, Any]:
+        """
+        counterpart_json   : JSON string of the counterpart's HandshakeDeclaration.
+        require_signature  : Warn if unsigned (default True).
+        """
+        try:
+            return service.validate_counterpart_declaration(
+                counterpart_json=counterpart_json,
+                require_signature=require_signature,
+            )
+        except ServiceError as exc:
+            return {"message": f"Error: {exc}", "data": {"error": str(exc)}}
+
+    @app.tool(
+        description=(
+            "Compute a disposition signal from two declarations: your own and a counterpart's. "
+            "Returns one of four modes: PROCEED (aligned), REROUTE (gap — adjust approach), "
+            "COMPLETE_AND_FLAG (complete but flag for review), REFUSE (incompatible — stop). "
+            "Also records the mode in the session ROR tracker. "
+            "Pass both declaration JSON strings from declare_posture responses."
+        )
+    )
+    def get_disposition(
+        self_declaration_json: str,
+        counterpart_declaration_json: str,
+        require_signature: bool = True,
+    ) -> dict[str, Any]:
+        """
+        self_declaration_json        : JSON of your own declaration (from declare_posture).
+        counterpart_declaration_json : JSON of the counterpart's declaration.
+        require_signature            : REFUSE if counterpart is unsigned (default True).
+        """
+        try:
+            return service.get_disposition(
+                self_declaration_json=self_declaration_json,
+                counterpart_declaration_json=counterpart_declaration_json,
+                require_signature=require_signature,
+            )
+        except ServiceError as exc:
+            return {"message": f"Error: {exc}", "data": {"error": str(exc)}}
+
+    @app.tool(
+        description=(
+            "Return the current ROR (Refused-Or-Rerouted) metrics for this session. "
+            "ROR rate = (REROUTE + REFUSE) / total dispositions. "
+            "This is the primary health metric for the Protocol. "
+            "0% ROR = either perfect alignment or no misalignment being detected. "
+            "High ROR = posture design gap or genuine alignment problem."
+        )
+    )
+    def get_ror_metrics() -> dict[str, Any]:
+        return service.get_ror_metrics()
 
     return app
 

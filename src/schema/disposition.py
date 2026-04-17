@@ -1,9 +1,8 @@
 """
-Phase 1 stub — Disposition schema.
+Phase 2 — Disposition schema (full implementation).
 
-Full implementation is Phase 2. This module defines the DispositionMode enum
-and a stub DispositionSignal model so Phase 1 code can reference them without
-depending on Phase 2 business logic.
+Replaces the Phase 1 stub. Adds alignment_score and counterpart_declaration_id
+to DispositionSignal so callers have the full picture from a single object.
 
 The four modes come directly from the Finite Agent Protocol:
   PROCEED           — counterpart posture is aligned; continue normally
@@ -29,11 +28,7 @@ class DispositionMode(str, Enum):
 
 
 class DispositionSignal(BaseModel):
-    """Output of the disposition engine (Phase 2).
-
-    Phase 1: this model exists so other modules can type-hint against it.
-    The engine that produces it is not yet implemented.
-    """
+    """Output of the disposition engine."""
 
     model_config = ConfigDict(extra="forbid")
 
@@ -43,5 +38,18 @@ class DispositionSignal(BaseModel):
         default=None,
         description="Suggested next step for the receiving agent.",
     )
-    declaration_id: str = Field(..., description="ID of the declaration this signal responds to.")
+    declaration_id: str = Field(
+        ...,
+        description="ID of the self declaration used in this handshake.",
+    )
+    counterpart_declaration_id: str = Field(
+        ...,
+        description="ID of the counterpart declaration evaluated.",
+    )
+    alignment_score: float = Field(
+        ...,
+        ge=0.0,
+        le=1.0,
+        description="Aggregate alignment score (0.0–1.0) used to determine mode.",
+    )
     issued_at: str = Field(..., description="ISO 8601 UTC timestamp.")

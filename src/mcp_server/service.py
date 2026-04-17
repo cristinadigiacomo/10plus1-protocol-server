@@ -1,15 +1,18 @@
 """
-Phase 1 — Protocol service layer.
+Phase 2 — Protocol service layer.
 
-Orchestrates the declaration pipeline: build → sign → validate → embed → log.
-MCP tools in tools.py are thin wrappers that call these methods.
+Extends Phase 1 with disposition engine methods:
+  validate_counterpart_declaration()
+  get_disposition()
+  get_ror_metrics()
 
-All business logic lives here. No logic in app.py or tools.py.
+All business logic lives here. No logic in app.py.
 
 Authoritative sources
 ---------------------
 PATTERNS.md PATTERN-004 (service layer separation)
 DECISIONS.md DEC-008 (dual-channel response)
+PHASES/PHASE_2.md
 """
 
 from __future__ import annotations
@@ -23,7 +26,10 @@ from typing import Any
 
 from declaration.builder import build as build_declaration
 from declaration.embedder import embed, embed_minimal
+from dispositioner.engine import compute_disposition
+from dispositioner.ror_tracker import RORTracker
 from schema.declaration import HandshakeDeclaration
+from schema.disposition import DispositionMode
 from schema.event import EventID, ProtocolCategory, ProtocolEvent
 from signer.signer import (
     ProtocolSigningError,
@@ -49,7 +55,7 @@ class ServiceError(Exception):
 
 
 class ProtocolService:
-    """Orchestrates the Phase 1 declaration pipeline.
+    """Orchestrates the full Protocol pipeline (Phases 1 + 2).
 
     Parameters
     ----------
@@ -57,9 +63,15 @@ class ProtocolService:
         Path to the HMAC key file (hex string, 32+ bytes).
         If not provided, defaults to PROTOCOL_HMAC_KEY_PATH env var,
         then '.protocol.key' in the current working directory.
+    ror_window : int
+        Rolling window size for the ROR tracker. Default 100.
     """
 
-    def __init__(self, key_path: str | Path | None = None) -> None:
+    def __init__(
+        self,
+        key_path: str | Path | None = None,
+        ror_window: int = 100,
+    ) -> None:
         resolved_path = (
             key_path
             or os.environ.get("PROTOCOL_HMAC_KEY_PATH")
@@ -68,6 +80,7 @@ class ProtocolService:
         self._key_path = Path(resolved_path)
         self._key: bytes | None = None
         self._event_count = 0
+        self._ror = RORTracker(window_size=ror_window)
 
     # --- Key management --------------------------------------------------
 
@@ -341,26 +354,264 @@ class ProtocolService:
         }
 
     def get_server_info(self) -> dict[str, Any]:
-        """Return server status information."""
+        """Return server status information including ROR metrics."""
+        ror_counts = self._ror.counts()
         return {
             "message": (
-                f"10+1 Protocol MCP Server — Phase 1. "
+                f"10+1 Protocol MCP Server — Phase 2. "
                 f"{self._event_count} events logged this session. "
-                f"Key path: {self._key_path} "
-                f"({'present' if self._key_path.is_file() else 'missing'})."
+                f"ROR rate: {self._ror.ror_rate():.1%} "
+                f"({self._ror.total()} dispositions). "
+                f"Key: {'present' if self._key_path.is_file() else 'missing'}."
             ),
             "data": {
                 "server": "10plus1-protocol",
-                "phase": 1,
-                "version": "0.1.0",
+                "phase": 2,
+                "version": "0.2.0",
                 "event_count": self._event_count,
                 "key_path": str(self._key_path),
                 "key_present": self._key_path.is_file(),
+                "ror": {
+                    "rate": self._ror.ror_rate(),
+                    "total": self._ror.total(),
+                    "window_size": self._ror.window_size(),
+                    "counts": ror_counts,
+                },
                 "tools": [
                     "declare_posture",
                     "validate_declaration",
                     "embed_posture",
+                    "validate_counterpart",
+                    "get_disposition",
+                    "get_ror_metrics",
                     "get_server_info",
                 ],
+            },
+        }
+
+    # --- Phase 2: Disposition methods ------------------------------------
+
+    def validate_counterpart_declaration(
+        self,
+        counterpart_json: str,
+        require_signature: bool = True,
+    ) -> dict[str, Any]:
+        """Validate a counterpart's declaration JSON.
+
+        Checks schema validity, principle coverage, vagueness, and optionally
+        signature presence. Does NOT verify the HMAC (no key exchange at this
+        layer) — only checks that the signature field is populated.
+
+        Parameters
+        ----------
+        counterpart_json : str
+            JSON string of the counterpart's HandshakeDeclaration.
+        require_signature : bool
+            If True, an unsigned declaration produces a WARNING. Default True.
+
+        Returns
+        -------
+        dict with keys: message, data
+        """
+        try:
+            raw = json.loads(counterpart_json)
+            counterpart = HandshakeDeclaration.model_validate(raw)
+        except (json.JSONDecodeError, ValueError) as exc:
+            raise ServiceError(f"Invalid counterpart declaration JSON: {exc}") from exc
+
+        result = validate(counterpart)
+
+        # Signature presence check
+        sig_present = counterpart.is_signed()
+        sig_warning = None
+        if require_signature and not sig_present:
+            sig_warning = (
+                "Counterpart declaration is unsigned. require_signature=True — "
+                "an unsigned declaration cannot be treated as a binding posture commitment."
+            )
+
+        self._log(
+            EventID.VALIDATION_PASSED if result.valid else EventID.VALIDATION_FAILED,
+            ProtocolCategory.VALIDATION,
+            counterpart.agent_id,
+            (
+                f"Counterpart declaration {counterpart.id[:8]}… validated: "
+                f"{result.summary()} | signed={sig_present}"
+            ),
+            data={"declaration_id": counterpart.id, "signed": sig_present},
+            declaration_id=counterpart.id,
+        )
+
+        warnings_data = [
+            {"principle_id": i.principle_id, "message": i.message, "suggestion": i.suggestion}
+            for i in result.warnings()
+        ]
+        if sig_warning:
+            warnings_data.insert(0, {
+                "principle_id": None,
+                "message": sig_warning,
+                "suggestion": "Ask counterpart to sign their declaration before proceeding.",
+            })
+
+        message = (
+            f"Counterpart '{counterpart.agent_id}': {result.summary()} | "
+            f"signed={'yes' if sig_present else 'NO'}."
+        )
+
+        return {
+            "message": message,
+            "data": {
+                "valid": result.valid,
+                "signed": sig_present,
+                "agent_id": counterpart.agent_id,
+                "declaration_id": counterpart.id,
+                "coverage_score": result.coverage_score,
+                "principles_covered": result.principles_covered,
+                "principles_missing": result.principles_missing,
+                "errors": [
+                    {"principle_id": i.principle_id, "message": i.message}
+                    for i in result.errors()
+                ],
+                "warnings": warnings_data,
+            },
+        }
+
+    def get_disposition(
+        self,
+        self_declaration_json: str,
+        counterpart_declaration_json: str,
+        require_signature: bool = True,
+    ) -> dict[str, Any]:
+        """Compute a DispositionSignal from two declarations.
+
+        Parameters
+        ----------
+        self_declaration_json : str
+            JSON of the initiating agent's own declaration.
+        counterpart_declaration_json : str
+            JSON of the counterpart's declaration.
+        require_signature : bool
+            If True, unsigned counterpart → REFUSE. Default True.
+
+        Returns
+        -------
+        dict with keys: message, data (disposition signal + alignment report)
+        """
+        try:
+            self_decl = HandshakeDeclaration.model_validate(
+                json.loads(self_declaration_json)
+            )
+        except (json.JSONDecodeError, ValueError) as exc:
+            raise ServiceError(f"Invalid self declaration JSON: {exc}") from exc
+
+        try:
+            counterpart = HandshakeDeclaration.model_validate(
+                json.loads(counterpart_declaration_json)
+            )
+        except (json.JSONDecodeError, ValueError) as exc:
+            raise ServiceError(f"Invalid counterpart declaration JSON: {exc}") from exc
+
+        signal, report = compute_disposition(self_decl, counterpart, require_signature)
+
+        # Record in ROR tracker
+        self._ror.record(signal.mode)
+
+        # Map mode to event ID
+        _DISPOSITION_EVENT_IDS = {
+            DispositionMode.PROCEED:           EventID.DISPOSITION_PROCEED,
+            DispositionMode.REROUTE:           EventID.DISPOSITION_REROUTE,
+            DispositionMode.COMPLETE_AND_FLAG: EventID.DISPOSITION_COMPLETE_FLAG,
+            DispositionMode.REFUSE:            EventID.DISPOSITION_REFUSE,
+        }
+        ev_id = _DISPOSITION_EVENT_IDS[signal.mode]
+
+        self._log(
+            ev_id,
+            ProtocolCategory.DISPOSITION,
+            self_decl.agent_id,
+            (
+                f"Disposition: {signal.mode.value} | "
+                f"score={signal.alignment_score:.2f} | "
+                f"self={self_decl.id[:8]}… counterpart={counterpart.id[:8]}…"
+            ),
+            data={
+                "mode": signal.mode.value,
+                "alignment_score": signal.alignment_score,
+                "self_declaration_id": self_decl.id,
+                "counterpart_declaration_id": counterpart.id,
+                "ror_rate_after": self._ror.ror_rate(),
+            },
+            declaration_id=self_decl.id,
+        )
+
+        gaps_data = [
+            {
+                "principle_id": g.principle_id,
+                "self_status": g.self_status,
+                "counterpart_status": g.counterpart_status,
+                "score": g.score,
+                "note": g.note,
+            }
+            for g in report.gaps
+        ]
+
+        message = (
+            f"Disposition: {signal.mode.value} "
+            f"(alignment {signal.alignment_score:.1%}, "
+            f"{report.scored_count} principles scored, "
+            f"{len(report.gaps)} gap(s)). "
+            f"ROR rate: {self._ror.ror_rate():.1%}."
+        )
+        if signal.recommended_action:
+            message += f" Action: {signal.recommended_action}"
+
+        return {
+            "message": message,
+            "data": {
+                "mode": signal.mode.value,
+                "alignment_score": signal.alignment_score,
+                "rationale": signal.rationale,
+                "recommended_action": signal.recommended_action,
+                "self_declaration_id": signal.declaration_id,
+                "counterpart_declaration_id": signal.counterpart_declaration_id,
+                "issued_at": signal.issued_at,
+                "report": {
+                    "scored_count": report.scored_count,
+                    "gaps": gaps_data,
+                    "skipped": report.skipped,
+                },
+                "ror_after": {
+                    "rate": self._ror.ror_rate(),
+                    "total": self._ror.total(),
+                },
+            },
+        }
+
+    def get_ror_metrics(self) -> dict[str, Any]:
+        """Return the current ROR (Refused-Or-Rerouted) metrics for this session.
+
+        Returns
+        -------
+        dict with keys: message, data
+        """
+        summary = self._ror.summary()
+        counts = self._ror.counts()
+        rate = self._ror.ror_rate()
+        total = self._ror.total()
+
+        message = f"ROR metrics — {summary}"
+
+        return {
+            "message": message,
+            "data": {
+                "ror_rate": rate,
+                "total_dispositions": total,
+                "window_size": self._ror.window_size(),
+                "counts": counts,
+                "interpretation": (
+                    "0% ROR: perfect alignment or no misalignment detected. "
+                    "High ROR: posture design gap or genuine alignment problem. "
+                    "Both extremes warrant investigation."
+                ),
             },
         }

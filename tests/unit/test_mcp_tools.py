@@ -182,9 +182,9 @@ class TestGetServerInfo:
         assert "message" in result
         assert "data" in result
 
-    def test_phase_is_1(self, service_no_key):
+    def test_phase_is_2(self, service_no_key):
         result = service_no_key.get_server_info()
-        assert result["data"]["phase"] == 1
+        assert result["data"]["phase"] == 2
 
     def test_tools_listed(self, service_no_key):
         result = service_no_key.get_server_info()
@@ -192,9 +192,157 @@ class TestGetServerInfo:
         assert "declare_posture" in tools
         assert "validate_declaration" in tools
         assert "embed_posture" in tools
+        assert "get_disposition" in tools
+        assert "get_ror_metrics" in tools
+
+    def test_ror_in_server_info(self, service_no_key):
+        result = service_no_key.get_server_info()
+        assert "ror" in result["data"]
+        assert "rate" in result["data"]["ror"]
 
     def test_event_count_increments(self, service_no_key):
         initial = service_no_key.get_server_info()["data"]["event_count"]
         service_no_key.declare_posture("agent", "some context with sources", sign=False)
         after = service_no_key.get_server_info()["data"]["event_count"]
         assert after > initial
+
+
+# --- validate_counterpart tests -----------------------------------------
+
+class TestValidateCounterpart:
+    def _decl_json(self, service_no_key) -> str:
+        r = service_no_key.declare_posture(
+            "counterpart", "explain sources and reason transparently", sign=False
+        )
+        return json.dumps(r["data"]["declaration"])
+
+    def test_returns_message_and_data(self, service_no_key):
+        decl_json = self._decl_json(service_no_key)
+        result = service_no_key.validate_counterpart_declaration(decl_json)
+        assert "message" in result
+        assert "data" in result
+
+    def test_data_has_signed_field(self, service_no_key):
+        decl_json = self._decl_json(service_no_key)
+        result = service_no_key.validate_counterpart_declaration(decl_json)
+        assert "signed" in result["data"]
+
+    def test_unsigned_produces_warning_when_required(self, service_no_key):
+        decl_json = self._decl_json(service_no_key)
+        result = service_no_key.validate_counterpart_declaration(
+            decl_json, require_signature=True
+        )
+        warnings = result["data"]["warnings"]
+        sig_warnings = [w for w in warnings if "unsigned" in w["message"].lower()]
+        assert len(sig_warnings) > 0
+
+    def test_invalid_json_raises(self, service_no_key):
+        from mcp_server.service import ServiceError
+        with pytest.raises(ServiceError):
+            service_no_key.validate_counterpart_declaration("{bad json")
+
+    def test_coverage_score_present(self, service_no_key):
+        decl_json = self._decl_json(service_no_key)
+        result = service_no_key.validate_counterpart_declaration(decl_json)
+        assert "coverage_score" in result["data"]
+
+
+# --- get_disposition tests ----------------------------------------------
+
+class TestGetDisposition:
+    def _two_decl_jsons(self, service_no_key):
+        r1 = service_no_key.declare_posture(
+            "self-agent",
+            "explain sources and reason transparently with accountability",
+            sign=False,
+        )
+        r2 = service_no_key.declare_posture(
+            "counterpart-agent",
+            "explain sources and reason transparently with accountability",
+            sign=False,
+        )
+        return (
+            json.dumps(r1["data"]["declaration"]),
+            json.dumps(r2["data"]["declaration"]),
+        )
+
+    def test_returns_message_and_data(self, service_no_key):
+        self_j, other_j = self._two_decl_jsons(service_no_key)
+        result = service_no_key.get_disposition(
+            self_j, other_j, require_signature=False
+        )
+        assert "message" in result
+        assert "data" in result
+
+    def test_data_has_mode(self, service_no_key):
+        self_j, other_j = self._two_decl_jsons(service_no_key)
+        result = service_no_key.get_disposition(self_j, other_j, require_signature=False)
+        assert "mode" in result["data"]
+        assert result["data"]["mode"] in ["PROCEED", "REROUTE", "COMPLETE_AND_FLAG", "REFUSE"]
+
+    def test_data_has_alignment_score(self, service_no_key):
+        self_j, other_j = self._two_decl_jsons(service_no_key)
+        result = service_no_key.get_disposition(self_j, other_j, require_signature=False)
+        score = result["data"]["alignment_score"]
+        assert 0.0 <= score <= 1.0
+
+    def test_data_has_ror_after(self, service_no_key):
+        self_j, other_j = self._two_decl_jsons(service_no_key)
+        result = service_no_key.get_disposition(self_j, other_j, require_signature=False)
+        assert "ror_after" in result["data"]
+        assert "rate" in result["data"]["ror_after"]
+
+    def test_unsigned_counterpart_refused_when_required(self, service_no_key):
+        self_j, other_j = self._two_decl_jsons(service_no_key)
+        result = service_no_key.get_disposition(
+            self_j, other_j, require_signature=True  # counterpart is unsigned
+        )
+        assert result["data"]["mode"] == "REFUSE"
+
+    def test_invalid_self_json_raises(self, service_no_key):
+        from mcp_server.service import ServiceError
+        _, other_j = self._two_decl_jsons(service_no_key)
+        with pytest.raises(ServiceError, match="self declaration"):
+            service_no_key.get_disposition("{bad}", other_j)
+
+    def test_invalid_counterpart_json_raises(self, service_no_key):
+        from mcp_server.service import ServiceError
+        self_j, _ = self._two_decl_jsons(service_no_key)
+        with pytest.raises(ServiceError, match="counterpart declaration"):
+            service_no_key.get_disposition(self_j, "{bad}")
+
+    def test_disposition_updates_ror(self, service_no_key):
+        initial = service_no_key.get_ror_metrics()["data"]["total_dispositions"]
+        self_j, other_j = self._two_decl_jsons(service_no_key)
+        service_no_key.get_disposition(self_j, other_j, require_signature=False)
+        after = service_no_key.get_ror_metrics()["data"]["total_dispositions"]
+        assert after == initial + 1
+
+
+# --- get_ror_metrics tests ----------------------------------------------
+
+class TestGetRORMetrics:
+    def test_returns_message_and_data(self, service_no_key):
+        result = service_no_key.get_ror_metrics()
+        assert "message" in result
+        assert "data" in result
+
+    def test_data_has_ror_rate(self, service_no_key):
+        result = service_no_key.get_ror_metrics()
+        assert "ror_rate" in result["data"]
+
+    def test_data_has_counts(self, service_no_key):
+        result = service_no_key.get_ror_metrics()
+        assert "counts" in result["data"]
+        counts = result["data"]["counts"]
+        assert "PROCEED" in counts
+        assert "REFUSE" in counts
+
+    def test_data_has_interpretation(self, service_no_key):
+        result = service_no_key.get_ror_metrics()
+        assert "interpretation" in result["data"]
+
+    def test_ror_zero_before_any_dispositions(self, service_no_key):
+        result = service_no_key.get_ror_metrics()
+        assert result["data"]["ror_rate"] == 0.0
+        assert result["data"]["total_dispositions"] == 0
