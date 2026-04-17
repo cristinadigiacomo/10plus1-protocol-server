@@ -501,3 +501,137 @@ class TestListSessions:
         sessions = result["data"]["sessions"]
         # Newest (c) should be first
         assert sessions[0]["initiator_id"] == "c"
+
+
+# --- Phase 4: Reporting & Persistence service tests ---------------------
+
+class TestGetEventJournal:
+    def test_returns_message_and_data(self, service_no_key):
+        result = service_no_key.get_event_journal()
+        assert "message" in result
+        assert "data" in result
+
+    def test_empty_journal(self, service_no_key):
+        result = service_no_key.get_event_journal()
+        assert "data" in result
+        assert "entries" in result["data"]
+        assert "total_lines" in result["data"]
+
+    def test_journal_populated_after_declare(self, service_no_key):
+        # declare_posture logs events to journal
+        service_no_key.declare_posture("agent-x", "explain sources", sign=False)
+        result = service_no_key.get_event_journal(n=10)
+        assert result["data"]["returned"] >= 1
+
+    def test_category_filter_applied(self, service_no_key):
+        service_no_key.declare_posture("agent-x", "explain sources", sign=False)
+        result = service_no_key.get_event_journal(n=50, category="DECLARATION")
+        assert result["data"]["category_filter"] == "DECLARATION"
+        for entry in result["data"]["entries"]:
+            assert entry["category"] == "DECLARATION"
+
+    def test_n_limits_results(self, service_no_key):
+        for i in range(5):
+            service_no_key.declare_posture(f"agent-{i}", "explain sources", sign=False)
+        result = service_no_key.get_event_journal(n=2)
+        assert result["data"]["returned"] <= 2
+
+    def test_data_has_total_lines(self, service_no_key):
+        result = service_no_key.get_event_journal()
+        assert isinstance(result["data"]["total_lines"], int)
+
+
+class TestExportSessionReport:
+    def _make_session(self, service_no_key) -> str:
+        r = service_no_key.declare_posture("agent-a", "explain sources transparently", sign=False)
+        a_json = json.dumps(r["data"]["declaration"])
+        init = service_no_key.initiate_handshake(a_json)
+        return init["data"]["session_id"]
+
+    def test_returns_message_and_data(self, service_no_key):
+        session_id = self._make_session(service_no_key)
+        result = service_no_key.export_session_report(session_id)
+        assert "message" in result
+        assert "data" in result
+
+    def test_message_is_markdown(self, service_no_key):
+        session_id = self._make_session(service_no_key)
+        result = service_no_key.export_session_report(session_id)
+        assert "# Handshake Session Report" in result["message"]
+
+    def test_report_type_is_session(self, service_no_key):
+        session_id = self._make_session(service_no_key)
+        result = service_no_key.export_session_report(session_id)
+        assert result["data"]["report_type"] == "session"
+
+    def test_invalid_session_id_raises(self, service_no_key):
+        from mcp_server.service import SessionNotFoundError
+        with pytest.raises(SessionNotFoundError):
+            service_no_key.export_session_report("no-such-id")
+
+    def test_session_id_in_message(self, service_no_key):
+        session_id = self._make_session(service_no_key)
+        result = service_no_key.export_session_report(session_id)
+        assert session_id in result["message"]
+
+
+class TestExportRorReport:
+    def test_returns_message_and_data(self, service_no_key):
+        result = service_no_key.export_ror_report()
+        assert "message" in result
+        assert "data" in result
+
+    def test_report_type_is_ror_trend(self, service_no_key):
+        result = service_no_key.export_ror_report()
+        assert result["data"]["report_type"] == "ror_trend"
+
+    def test_empty_ror_message(self, service_no_key):
+        result = service_no_key.export_ror_report()
+        assert "ROR Trend Report" in result["message"]
+
+    def test_ror_populated_after_disposition(self, service_no_key):
+        r_a = service_no_key.declare_posture("a", "explain sources transparently", sign=False)
+        r_b = service_no_key.declare_posture("b", "explain sources transparently", sign=False)
+        a_json = json.dumps(r_a["data"]["declaration"])
+        b_json = json.dumps(r_b["data"]["declaration"])
+        init = service_no_key.initiate_handshake(a_json)
+        service_no_key.respond_to_handshake(
+            init["data"]["session_id"], b_json, require_signature=False
+        )
+        result = service_no_key.export_ror_report()
+        assert result["data"]["trend"]["snapshot_count"] >= 1
+
+
+class TestGetSummary:
+    def test_returns_message_and_data(self, service_no_key):
+        result = service_no_key.get_summary()
+        assert "message" in result
+        assert "data" in result
+
+    def test_report_type_is_summary(self, service_no_key):
+        result = service_no_key.get_summary()
+        assert result["data"]["report_type"] == "summary"
+
+    def test_message_contains_header(self, service_no_key):
+        result = service_no_key.get_summary()
+        assert "10+1 Protocol" in result["message"]
+
+    def test_data_has_sessions(self, service_no_key):
+        result = service_no_key.get_summary()
+        assert "sessions" in result["data"]
+        assert "total" in result["data"]["sessions"]
+
+    def test_data_has_ror(self, service_no_key):
+        result = service_no_key.get_summary()
+        assert "ror" in result["data"]
+
+    def test_data_has_journal(self, service_no_key):
+        result = service_no_key.get_summary()
+        assert "journal" in result["data"]
+
+    def test_session_count_reflects_reality(self, service_no_key):
+        for i in range(3):
+            r = service_no_key.declare_posture(f"a{i}", "explain sources", sign=False)
+            service_no_key.initiate_handshake(json.dumps(r["data"]["declaration"]))
+        result = service_no_key.get_summary()
+        assert result["data"]["sessions"]["total"] == 3

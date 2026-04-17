@@ -4,6 +4,62 @@ Working notes. Updated at the end of every session. Newest entry at top.
 
 ---
 
+## 2026-04-17 — Phase 4 Complete
+
+**What landed:**
+- 290/290 unit tests passing (57 new tests: 45 in test_reporting.py + 26 Phase 4 additions to test_mcp_tools.py minus previous count)
+- Git tag: phase-4-complete
+- All four phases complete — Protocol MCP server fully operational
+
+**Phase 4 files written:**
+- `src/reporting/journal.py` — EventJournal: append-only JSONL, read_recent(), total_lines()
+- `src/reporting/ror_persistence.py` — RORPersistence: JSON snapshot file, trend_summary()
+- `src/reporting/exporter.py` — build_session_report(), build_ror_report(), build_summary()
+- `src/reporting/__init__.py`
+- `src/mcp_server/service.py` — Extended: _journal/_ror_store in __init__, _log() writes to journal, get_event_journal(), export_session_report(), export_ror_report(), get_summary()
+- `src/mcp_server/app.py` — 4 new Phase 4 tools: get_event_journal, export_session_report, export_ror_report, get_summary
+- `tests/unit/test_reporting.py` — 45 tests
+- `tests/unit/test_mcp_tools.py` — Phase 4 additions
+
+**Phase 4 done criteria:**
+- [x] EventJournal persists events across restarts (.protocol_journal.jsonl)
+- [x] RORPersistence persists snapshots across restarts (.protocol_ror.json)
+- [x] build_session_report / build_ror_report / build_summary return markdown + data
+- [x] 4 new MCP tools wired to service methods
+- [x] 290/290 tests passing
+- [x] Git commit and tag phase-4-complete
+
+**What's next:**
+- Register server in Claude Code config (mcp.json) if not already done
+- Generate .protocol.key: `python3 -c "from signer.signer import generate_key_hex; print(generate_key_hex())" > .protocol.key`
+- Live smoke test with actual MCP clients
+- Phase 5 (if planned): rolling journal archive, multi-server federation, advisory board dashboard
+
+---
+
+## 2026-04-17 — Phase 3 Complete
+
+**What landed:**
+- HandshakeSession state machine: INITIATED → RESPONDED → COMPLETE / FAILED
+- HandshakeManager: OrderedDict + LRU eviction (max_sessions=500)
+- 4 new MCP tools: initiate_handshake, respond_to_handshake, get_handshake_result, list_sessions
+- 233/233 tests passing
+- Git tag: phase-3-complete
+
+---
+
+## 2026-04-17 — Phase 2 Complete
+
+**What landed:**
+- DispositionSignal + DispositionMode (PROCEED/REROUTE/COMPLETE_AND_FLAG/REFUSE)
+- RORTracker: deque-based sliding window, ror_rate()
+- Disposition engine: scoring matrix, hard overrides (unsigned→REFUSE, C6 PARTIAL+harm→REFUSE)
+- 3 new MCP tools: validate_counterpart, get_disposition, get_ror_metrics
+- 185/185 tests passing
+- Git tag: phase-2-complete
+
+---
+
 ## 2026-04-17 — Phase 1 Complete
 
 **What landed:**

@@ -271,6 +271,64 @@ def build_app(service: ProtocolService) -> FastMCP:
         """
         return service.list_sessions(n)
 
+    # --- Phase 4 tools ---------------------------------------------------
+
+    @app.tool(
+        description=(
+            "Read recent entries from the persistent JSONL event journal. "
+            "The journal captures every Protocol event across server restarts. "
+            "Optionally filter by category: DECLARATION, VALIDATION, DISPOSITION, "
+            "SIGNING, SERVER. Returns entries newest-first."
+        )
+    )
+    def get_event_journal(
+        n: int = 50,
+        category: str | None = None,
+    ) -> dict[str, Any]:
+        """
+        n        : Maximum entries to return (default 50).
+        category : Optional filter — DECLARATION, VALIDATION, DISPOSITION, SIGNING, SERVER.
+        """
+        return service.get_event_journal(n=n, category=category)
+
+    @app.tool(
+        description=(
+            "Generate a structured markdown report for a single handshake session. "
+            "Includes disposition mode, alignment score, per-principle gap table, "
+            "and recommended action. Suitable for advisory board export. "
+            "Pass the session_id from initiate_handshake or list_sessions."
+        )
+    )
+    def export_session_report(session_id: str) -> dict[str, Any]:
+        """
+        session_id : The UUID of the session to report on.
+        """
+        try:
+            return service.export_session_report(session_id)
+        except Exception as exc:
+            return {"message": f"Error: {exc}", "data": {"error": str(exc)}}
+
+    @app.tool(
+        description=(
+            "Generate a markdown ROR trend report across all persisted snapshots. "
+            "Shows min/max/mean/latest ROR rates and a table of the 10 most recent "
+            "snapshots with per-mode counts. Persists across server restarts. "
+            "ROR = (REROUTE + REFUSE) / total dispositions."
+        )
+    )
+    def export_ror_report() -> dict[str, Any]:
+        return service.export_ror_report()
+
+    @app.tool(
+        description=(
+            "Return a server-wide dashboard summary combining session counts, "
+            "ROR health metrics, and event journal statistics. "
+            "The primary operator health check tool for the 10+1 Protocol server."
+        )
+    )
+    def get_summary() -> dict[str, Any]:
+        return service.get_summary()
+
     return app
 
 

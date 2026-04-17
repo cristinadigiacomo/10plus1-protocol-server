@@ -1,11 +1,11 @@
 """
-Phase 3 — Protocol service layer.
+Phase 4 — Protocol service layer.
 
-Extends Phase 2 with handshake session methods:
-  initiate_handshake()
-  respond_to_handshake()
-  get_handshake_result()
-  list_sessions()
+Extends Phase 3 with reporting and persistence:
+  get_event_journal()
+  export_session_report()
+  export_ror_report()
+  get_summary()
 
 All business logic lives here. No logic in app.py.
 
@@ -13,7 +13,7 @@ Authoritative sources
 ---------------------
 PATTERNS.md PATTERN-004 (service layer separation)
 DECISIONS.md DEC-008 (dual-channel response)
-PHASES/PHASE_3.md
+PHASES/PHASE_4.md
 """
 
 from __future__ import annotations
@@ -35,6 +35,9 @@ from handshake.manager import (
     SessionStateError,
 )
 from handshake.session import SessionState
+from reporting.exporter import build_ror_report, build_session_report, build_summary
+from reporting.journal import EventJournal
+from reporting.ror_persistence import RORPersistence
 from schema.declaration import HandshakeDeclaration
 from schema.disposition import DispositionMode
 from schema.event import EventID, ProtocolCategory, ProtocolEvent
@@ -89,6 +92,8 @@ class ProtocolService:
         self._event_count = 0
         self._ror = RORTracker(window_size=ror_window)
         self._handshake = HandshakeManager()
+        self._journal = EventJournal()
+        self._ror_store = RORPersistence()
 
     # --- Key management --------------------------------------------------
 
@@ -116,8 +121,17 @@ class ProtocolService:
         data: dict | None = None,
         declaration_id: str | None = None,
     ) -> None:
-        """Write a ProtocolEvent to Windows Event Log (best-effort)."""
+        """Write a ProtocolEvent to Windows Event Log and local JSONL journal."""
         self._event_count += 1
+        # Always write to journal (cross-platform, persists across restarts)
+        self._journal.append(
+            event_id=event_id,
+            category=category.value,
+            agent_id=agent_id,
+            message=message,
+            data=data,
+            declaration_id=declaration_id,
+        )
         if not _EVENT_WRITER_AVAILABLE:
             logger.info("[protocol] id=%d %s", event_id, message)
             return
@@ -525,8 +539,13 @@ class ProtocolService:
 
         signal, report = compute_disposition(self_decl, counterpart, require_signature)
 
-        # Record in ROR tracker
+        # Record in ROR tracker + persist snapshot
         self._ror.record(signal.mode)
+        self._ror_store.record(
+            ror_rate=self._ror.ror_rate(),
+            total=self._ror.total(),
+            counts=self._ror.counts(),
+        )
 
         # Map mode to event ID
         _DISPOSITION_EVENT_IDS = {
@@ -719,9 +738,14 @@ class ProtocolService:
         except SessionStateError as exc:
             raise ServiceError(str(exc)) from exc
 
-        # Record in ROR tracker
+        # Record in ROR tracker + persist snapshot
         if session.disposition:
             self._ror.record(session.disposition.mode)
+            self._ror_store.record(
+                ror_rate=self._ror.ror_rate(),
+                total=self._ror.total(),
+                counts=self._ror.counts(),
+            )
 
         ev_id = (
             EventID.HANDSHAKE_FAILED
@@ -835,3 +859,101 @@ class ProtocolService:
                 "sessions": [s.to_dict() for s in sessions],
             },
         }
+
+    # ------------------------------------------------------------------
+    # Phase 4 — Reporting & Persistence
+    # ------------------------------------------------------------------
+
+    def get_event_journal(
+        self,
+        n: int = 50,
+        category: str | None = None,
+    ) -> dict:
+        """Return recent entries from the JSONL event journal.
+
+        Parameters
+        ----------
+        n : int
+            Maximum number of entries to return (default 50).
+        category : str | None
+            If set, filter to this category (e.g. 'DISPOSITION').
+
+        Returns
+        -------
+        dict with keys: message, data (entries list)
+        """
+        entries = self._journal.read_recent(n=n, category=category)
+        total = self._journal.total_lines()
+
+        cat_str = f" (category={category})" if category else ""
+        msg = (
+            f"Journal has {total} total line(s). "
+            f"Returning {len(entries)} most recent{cat_str}."
+        )
+        return {
+            "message": msg,
+            "data": {
+                "total_lines": total,
+                "returned": len(entries),
+                "category_filter": category,
+                "entries": entries,
+            },
+        }
+
+    def export_session_report(self, session_id: str) -> dict:
+        """Build a full markdown+data report for a single handshake session.
+
+        Parameters
+        ----------
+        session_id : str
+            The UUID of the session to report on.
+
+        Returns
+        -------
+        dict with keys: message (markdown), data (structured)
+
+        Raises
+        ------
+        SessionNotFoundError if session_id is unknown.
+        """
+        session = self._handshake.get(session_id)
+        return build_session_report(session)
+
+    def export_ror_report(self) -> dict:
+        """Build a markdown+data ROR trend report across all persisted snapshots.
+
+        Returns
+        -------
+        dict with keys: message (markdown), data (structured)
+        """
+        return build_ror_report(self._ror_store)
+
+    def get_summary(self) -> dict:
+        """Build a server-wide dashboard summary.
+
+        Combines session counts, ROR health, and event journal statistics
+        into a single dual-channel response.
+
+        Returns
+        -------
+        dict with keys: message (markdown), data (structured)
+        """
+        all_sessions = self._handshake.list_recent(n=self._handshake.total() or 1)
+        session_total = self._handshake.total()
+
+        state_counts: dict[str, int] = {s.value: 0 for s in SessionState}
+        for sess in all_sessions:
+            state_counts[sess.state.value] += 1
+
+        journal_total = self._journal.total_lines()
+        recent_journal = self._journal.read_recent(n=5)
+        event_count = self._ror.total()  # dispositions this server lifetime
+
+        return build_summary(
+            session_total=session_total,
+            session_state_counts=state_counts,
+            ror_persistence=self._ror_store,
+            journal_total=journal_total,
+            recent_journal=recent_journal,
+            event_count=event_count,
+        )
