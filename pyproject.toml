@@ -1,0 +1,40 @@
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"
+
+[project]
+name = "10plus1-protocol"
+version = "0.1.0"
+description = "10+1 Protocol MCP Server — AI↔AI ethical handshake layer"
+readme = "README.md"
+license = { text = "MIT" }
+authors = [{ name = "Cristina DiGiacomo / 10P1 Inc.", email = "cristina@10plus1.co" }]
+requires-python = ">=3.13"
+dependencies = [
+    "pydantic>=2.0",
+    "mcp[cli]",
+    "pywin32>=306",
+    "python-dotenv>=1.0",
+    "fastapi>=0.115",
+    "uvicorn>=0.30",
+]
+
+[project.scripts]
+10plus1-protocol = "src.mcp_server.app:main"
+
+[project.urls]
+Homepage = "https://10plus1.co"
+Repository = "https://github.com/10p1inc/10plus1-protocol"
+
+[tool.hatch.build.targets.wheel]
+packages = ["src"]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+python_files = ["test_*.py"]
+python_classes = ["Test*"]
+python_functions = ["test_*"]
+
+[tool.ruff]
+line-length = 100
+target-version = "py313"
