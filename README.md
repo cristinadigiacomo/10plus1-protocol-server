@@ -11,7 +11,10 @@ The 10+1 Protocol MCP Server provides that language as a Model Context Protocol 
 1. **Declare its posture** — generate a signed Handshake Declaration mapped to the 11 principles of the 10+1 Standard (C1–C11)
 2. **Validate a counterpart's declaration** — verify signature, check compliance mapping, assess posture alignment
 3. **Receive a disposition signal** — one of four structured modes that tell it how to proceed
-4. **Log interactions** — structured event trail via Windows Event Log (event IDs 7000–7499)
+4. **Conduct a stateful handshake session** — initiate or respond to a full Protocol exchange with session tracking
+5. **Track ROR metrics** — monitor Refused-Or-Rerouted rate in a rolling window for health monitoring
+6. **Export reports** — generate session reports and ROR trend exports in JSON or markdown
+7. **Log interactions** — structured event trail via Windows Event Log (event IDs 7000–7499, source: 10plus1-Protocol)
 
 ## The Four Operating Modes
 
@@ -44,9 +47,26 @@ This server's architecture is grounded in empirical research (the Moltbook Exper
 
 MCP stdio transport. Runs as a local process, integrated with Claude Code or any MCP-capable host.
 
+## MCP Tools
+
+| Tool | Phase | Purpose |
+|------|-------|---------|
+| `declare_posture` | 1 | Generate a signed HandshakeDeclaration for this agent |
+| `validate_counterpart` | 1 | Verify and score a counterpart's declaration |
+| `get_disposition` | 1–2 | Get PROCEED/REROUTE/COMPLETE_AND_FLAG/REFUSE signal |
+| `get_ror_metrics` | 2 | Get current ROR rate and rolling-window stats |
+| `initiate_handshake` | 3 | Start a new Protocol session (returns session_id) |
+| `respond_to_handshake` | 3 | Respond to an initiated session; computes disposition |
+| `get_session` | 3 | Retrieve session state by session_id |
+| `close_session` | 3 | Mark a session complete |
+| `get_report` | 4 | Export a session report (JSON or markdown) |
+| `get_ror_trend` | 4 | Export ROR trend over time |
+| `get_dashboard` | 4 | Server-wide summary of all sessions and health metrics |
+| `export_journal` | 4 | Export the full event journal |
+
 ## Project Status
 
-🔴 Phase 1 — In planning
+🟢 All 4 phases complete
 
 ## Part of the 10P1 Inc. Stack
 
