@@ -51,13 +51,15 @@ from validator.validator import ValidationResult, validate
 
 logger = logging.getLogger(__name__)
 
-# Lazy import — event writer requires pywin32 which may not be available
-try:
-    from event_viewer.writer import EventViewerError, write_event as _write_event
-    _EVENT_WRITER_AVAILABLE = True
-except ImportError:
-    _EVENT_WRITER_AVAILABLE = False
-    logger.warning("pywin32 not available — event logging disabled")
+_persistence_backend = None
+
+
+def _get_persistence_backend():
+    global _persistence_backend
+    if _persistence_backend is None:
+        from persistence import get_backend
+        _persistence_backend = get_backend()
+    return _persistence_backend
 
 
 class ServiceError(Exception):
@@ -132,9 +134,6 @@ class ProtocolService:
             data=data,
             declaration_id=declaration_id,
         )
-        if not _EVENT_WRITER_AVAILABLE:
-            logger.info("[protocol] id=%d %s", event_id, message)
-            return
         try:
             event = ProtocolEvent(
                 message=message,
@@ -144,7 +143,7 @@ class ProtocolService:
                 declaration_id=declaration_id,
                 data=data or {},
             )
-            _write_event(event)
+            _get_persistence_backend().write_event(event)
         except Exception as exc:
             logger.warning("Event log write failed (non-fatal): %s", exc)
 
