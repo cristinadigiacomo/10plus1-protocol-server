@@ -1,0 +1,108 @@
+<!DOCTYPE html>
+<html lang="en" class="h-full">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>{% block title %}10+1 Protocol{% endblock %} — Network Monitor</title>
+  <script src="https://cdn.tailwindcss.com"></script>
+  <script>
+    tailwind.config = {
+      theme: {
+        extend: {
+          fontFamily: { mono: ['ui-monospace','SFMono-Regular','Menlo','Monaco','Consolas','monospace'] }
+        }
+      }
+    }
+  </script>
+  <script defer src="https://cdn.jsdelivr.net/npm/alpinejs@3.14.1/dist/cdn.min.js"></script>
+  <style>
+    [x-cloak] { display: none !important; }
+    body { background-color: #020617; }
+    .stat-card { background: #0f172a; border: 1px solid #1e293b; border-radius: 0.75rem; }
+    .pill-compliant   { background: rgba(52,211,153,0.12); color: #34d399; }
+    .pill-declared    { background: rgba(96,165,250,0.12); color: #60a5fa; }
+    .pill-partial     { background: rgba(251,191,36,0.12); color: #fbbf24; }
+    .pill-na          { background: rgba(100,116,139,0.12); color: #64748b; }
+    .mode-proceed     { background: rgba(52,211,153,0.12); color: #34d399; }
+    .mode-reroute     { background: rgba(251,191,36,0.12); color: #fbbf24; }
+    .mode-flag        { background: rgba(251,146,60,0.12); color: #fb923c; }
+    .mode-refuse      { background: rgba(248,113,113,0.12); color: #f87171; }
+    .cat-declaration  { color: #818cf8; }
+    .cat-disposition  { color: #facc15; }
+    .cat-validation   { color: #c084fc; }
+    .cat-signing      { color: #6366f1; }
+    .cat-server       { color: #64748b; }
+    @keyframes pulse-dot { 0%,100%{opacity:1} 50%{opacity:.4} }
+    .live-dot { animation: pulse-dot 2s ease-in-out infinite; }
+  </style>
+</head>
+<body class="text-slate-200 min-h-full font-sans antialiased">
+
+  <!-- Navigation -->
+  <nav style="background:#0f172a;border-bottom:1px solid #1e293b" class="sticky top-0 z-50">
+    <div class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
+      <div class="flex items-center justify-between h-14">
+
+        <!-- Brand + nav links -->
+        <div class="flex items-center gap-6">
+          <a href="/" class="flex items-center gap-2 shrink-0">
+            <span class="text-violet-400 font-bold text-base font-mono tracking-tight">10+1</span>
+            <span class="text-slate-200 font-semibold text-sm">Protocol</span>
+          </a>
+          <div class="hidden sm:flex items-center gap-0.5">
+            <a href="/"
+               class="px-3 py-1.5 rounded text-xs font-medium transition-colors
+               {% if active_page == 'overview' %}text-slate-100 bg-slate-800{% else %}text-slate-400 hover:text-slate-200 hover:bg-slate-800/50{% endif %}">
+              Overview
+            </a>
+            <a href="/activity"
+               class="px-3 py-1.5 rounded text-xs font-medium transition-colors
+               {% if active_page == 'activity' %}text-slate-100 bg-slate-800{% else %}text-slate-400 hover:text-slate-200 hover:bg-slate-800/50{% endif %}">
+              Activity
+            </a>
+            <a href="/handshakes"
+               class="px-3 py-1.5 rounded text-xs font-medium transition-colors
+               {% if active_page == 'handshakes' %}text-slate-100 bg-slate-800{% else %}text-slate-400 hover:text-slate-200 hover:bg-slate-800/50{% endif %}">
+              Handshakes
+            </a>
+            <a href="/agents"
+               class="px-3 py-1.5 rounded text-xs font-medium transition-colors
+               {% if active_page == 'agents' %}text-slate-100 bg-slate-800{% else %}text-slate-400 hover:text-slate-200 hover:bg-slate-800/50{% endif %}">
+              Agents
+            </a>
+          </div>
+        </div>
+
+        <!-- ROR health indicator -->
+        <div class="flex items-center gap-2 text-xs font-mono">
+          <span class="live-dot
+            {% if ror_status == 'green' %}text-emerald-400
+            {% elif ror_status == 'amber' %}text-amber-400
+            {% else %}text-red-400{% endif %}">●</span>
+          <span class="text-slate-500">ROR</span>
+          <span class="font-semibold
+            {% if ror_status == 'green' %}text-emerald-400
+            {% elif ror_status == 'amber' %}text-amber-400
+            {% else %}text-red-400{% endif %}">{{ ror_pct }}</span>
+        </div>
+
+      </div>
+    </div>
+  </nav>
+
+  <!-- Page content -->
+  <main class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
+    {% block content %}{% endblock %}
+  </main>
+
+  <!-- Footer -->
+  <footer style="border-top:1px solid #1e293b" class="mt-20 py-8">
+    <div class="max-w-7xl mx-auto px-4 text-center">
+      <p class="text-slate-600 text-xs font-mono tracking-wide">
+        Governance must exist at the precondition layer
+      </p>
+    </div>
+  </footer>
+
+</body>
+</html>

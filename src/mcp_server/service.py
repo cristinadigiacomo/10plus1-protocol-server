@@ -210,7 +210,16 @@ class ProtocolService:
             f"Posture declaration created for agent '{agent_id}' — "
             f"{len(declaration.principles)} principles, "
             f"{'signed' if declaration.is_signed() else 'unsigned'}",
-            data={"declaration_id": declaration.id, "principle_count": len(declaration.principles)},
+            data={
+                "declaration_id": declaration.id,
+                "principle_count": len(declaration.principles),
+                "principles": {
+                    pid: stmt.status.value
+                    for pid, stmt in declaration.principles.items()
+                },
+                "coverage_score": declaration.coverage(),
+                "context_summary": declaration.context_summary,
+            },
             declaration_id=declaration.id,
         )
 
@@ -765,9 +774,13 @@ class ProtocolService:
                 else f"Handshake {session.session_id[:8]}… FAILED: {session.error}"
             ),
             data={
-                "session_id":   session.session_id,
-                "mode":         mode_str,
-                "counterpart_id": counterpart_decl.agent_id,
+                "session_id":      session.session_id,
+                "initiator_id":    session.initiator_id,
+                "counterpart_id":  counterpart_decl.agent_id,
+                "mode":            mode_str,
+                "alignment_score": session.disposition.alignment_score if session.disposition else None,
+                "rationale":       session.disposition.rationale if session.disposition else None,
+                "alignment_report": session.alignment_report,
             },
             declaration_id=counterpart_decl.id,
         )

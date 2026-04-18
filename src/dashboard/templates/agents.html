@@ -1,0 +1,198 @@
+{% extends "base.html" %}
+{% block title %}Agents{% endblock %}
+
+{% block content %}
+
+<div class="mb-6">
+  <h1 class="text-xl font-semibold text-slate-100">Agent Registry</h1>
+  <p class="text-slate-500 text-sm mt-1">
+    Every agent that has declared posture on this network
+  </p>
+</div>
+
+<!-- Agent cards -->
+{% if agents %}
+<div class="space-y-3 mb-16">
+  {% for agent in agents %}
+  <div class="stat-card p-5">
+    <div class="flex flex-col sm:flex-row sm:items-start gap-4">
+
+      <!-- Identity + context -->
+      <div class="flex-1 min-w-0">
+        <div class="flex items-center gap-3 mb-1">
+          <p class="font-mono font-semibold text-slate-100">{{ agent.agent_id }}</p>
+          <span class="text-xs font-mono text-slate-600">
+            {{ agent.declaration_count }} declaration{{ 's' if agent.declaration_count != 1 else '' }}
+          </span>
+          {% if agent.handshake_count > 0 %}
+          <span class="text-xs font-mono text-slate-600">
+            · {{ agent.handshake_count }} handshake{{ 's' if agent.handshake_count != 1 else '' }}
+          </span>
+          {% endif %}
+        </div>
+        {% if agent.context_summary %}
+        <p class="text-slate-500 text-xs mb-3 truncate">{{ agent.context_summary }}</p>
+        {% endif %}
+
+        <!-- Principle pills -->
+        <div class="flex flex-wrap gap-1.5">
+          {% for pill in agent.principle_pills %}
+          <span class="text-xs font-mono px-1.5 py-0.5 rounded
+            {% if pill.status == 'COMPLIANT' %}pill-compliant
+            {% elif pill.status == 'DECLARED' %}pill-declared
+            {% elif pill.status == 'PARTIAL' %}pill-partial
+            {% else %}pill-na{% endif %}"
+                title="{{ pill.name }}: {{ pill.status }}">
+            {{ pill.id }}
+          </span>
+          {% endfor %}
+          {% if not agent.principle_pills %}
+          <span class="text-slate-700 text-xs font-mono">no principle data</span>
+          {% endif %}
+        </div>
+      </div>
+
+      <!-- Coverage meter -->
+      <div class="shrink-0 text-right sm:w-32">
+        <p class="text-slate-600 text-xs font-mono uppercase tracking-wider mb-1">Coverage</p>
+        <p class="text-2xl font-bold font-mono
+          {% if agent.coverage_score >= 0.8 %}text-emerald-400
+          {% elif agent.coverage_score >= 0.5 %}text-amber-400
+          {% else %}text-red-400{% endif %}">
+          {{ "%.0f"|format(agent.coverage_score * 100) }}%
+        </p>
+        <div class="mt-1.5 bg-slate-800 rounded-full h-1 w-full">
+          <div class="h-1 rounded-full
+            {% if agent.coverage_score >= 0.8 %}bg-emerald-500
+            {% elif agent.coverage_score >= 0.5 %}bg-amber-500
+            {% else %}bg-red-500{% endif %}"
+               style="width:{{ (agent.coverage_score * 100) | round | int }}%"></div>
+        </div>
+        <p class="text-slate-700 text-xs font-mono mt-1">
+          last seen {{ agent.last_seen[:10] if agent.last_seen else '—' }}
+        </p>
+      </div>
+
+    </div>
+  </div>
+  {% endfor %}
+</div>
+{% else %}
+<div class="stat-card p-12 text-center text-slate-600 text-sm mb-16">
+  No agents have declared posture yet.
+</div>
+{% endif %}
+
+
+<!-- ================================================================
+     PRINCIPLE COVERAGE HEATMAP
+     ================================================================ -->
+<div style="border-top:1px solid #1e293b" class="pt-12">
+
+  <div class="mb-6">
+    <h2 class="text-lg font-semibold text-slate-100">Principle Coverage Heatmap</h2>
+    <p class="text-slate-500 text-sm mt-1">
+      Which principles the network commits to — and where the blind spots are
+    </p>
+  </div>
+
+  <!-- Legend -->
+  <div class="flex flex-wrap gap-4 mb-6 text-xs font-mono">
+    <span class="flex items-center gap-1.5"><span class="w-2.5 h-2.5 rounded-sm bg-emerald-500 inline-block"></span><span class="text-slate-400">COMPLIANT</span></span>
+    <span class="flex items-center gap-1.5"><span class="w-2.5 h-2.5 rounded-sm bg-blue-500 inline-block"></span><span class="text-slate-400">DECLARED</span></span>
+    <span class="flex items-center gap-1.5"><span class="w-2.5 h-2.5 rounded-sm bg-amber-500 inline-block"></span><span class="text-slate-400">PARTIAL</span></span>
+    <span class="flex items-center gap-1.5"><span class="w-2.5 h-2.5 rounded-sm bg-slate-700 inline-block"></span><span class="text-slate-400">NOT APPLICABLE</span></span>
+  </div>
+
+  {% if heatmap %}
+  <div class="stat-card overflow-hidden">
+
+    <!-- Heatmap header -->
+    <div class="grid grid-cols-12 gap-2 px-5 py-3 text-xs font-mono text-slate-600 uppercase tracking-wider"
+         style="border-bottom:1px solid #1e293b">
+      <div class="col-span-3">Principle</div>
+      <div class="col-span-6">Distribution</div>
+      <div class="col-span-1 text-right">Covered</div>
+      <div class="col-span-2 text-right">Total decls</div>
+    </div>
+
+    {% for p in heatmap %}
+    <div class="grid grid-cols-12 gap-2 px-5 py-3 items-center"
+         style="border-bottom:1px solid #0f172a">
+
+      <!-- Principle ID + name -->
+      <div class="col-span-3">
+        <span class="font-mono text-slate-300 text-xs font-semibold">{{ p.id }}</span>
+        <span class="text-slate-600 text-xs ml-1.5">{{ p.name }}</span>
+      </div>
+
+      <!-- Stacked bar -->
+      <div class="col-span-6">
+        {% if p.total > 0 %}
+        <div class="flex h-4 rounded overflow-hidden bg-slate-800 gap-px">
+          {% set comp_pct = (p.counts.COMPLIANT / p.total * 100) | round | int %}
+          {% set decl_pct = (p.counts.DECLARED / p.total * 100) | round | int %}
+          {% set part_pct = (p.counts.PARTIAL / p.total * 100) | round | int %}
+          {% set na_pct   = (p.counts.NOT_APPLICABLE / p.total * 100) | round | int %}
+          {% if comp_pct > 0 %}<div class="bg-emerald-500" style="width:{{ comp_pct }}%" title="COMPLIANT: {{ p.counts.COMPLIANT }}"></div>{% endif %}
+          {% if decl_pct > 0 %}<div class="bg-blue-500"   style="width:{{ decl_pct }}%" title="DECLARED: {{ p.counts.DECLARED }}"></div>{% endif %}
+          {% if part_pct > 0 %}<div class="bg-amber-500"  style="width:{{ part_pct }}%" title="PARTIAL: {{ p.counts.PARTIAL }}"></div>{% endif %}
+          {% if na_pct   > 0 %}<div class="bg-slate-700"  style="width:{{ na_pct }}%"   title="N/A: {{ p.counts.NOT_APPLICABLE }}"></div>{% endif %}
+        </div>
+        <!-- Count labels below bar -->
+        <div class="flex gap-3 mt-1 text-xs font-mono">
+          {% if p.counts.COMPLIANT   > 0 %}<span class="text-emerald-600">{{ p.counts.COMPLIANT }}C</span>{% endif %}
+          {% if p.counts.DECLARED    > 0 %}<span class="text-blue-600">{{ p.counts.DECLARED }}D</span>{% endif %}
+          {% if p.counts.PARTIAL     > 0 %}<span class="text-amber-600">{{ p.counts.PARTIAL }}P</span>{% endif %}
+          {% if p.counts.NOT_APPLICABLE > 0 %}<span class="text-slate-700">{{ p.counts.NOT_APPLICABLE }}N/A</span>{% endif %}
+        </div>
+        {% else %}
+        <div class="h-4 rounded bg-slate-800 w-full"></div>
+        <p class="text-slate-700 text-xs font-mono mt-1">no data</p>
+        {% endif %}
+      </div>
+
+      <!-- Coverage percentage (non-NA declarations) -->
+      <div class="col-span-1 text-right font-mono text-xs
+        {% if p.covered_pct >= 80 %}text-emerald-400
+        {% elif p.covered_pct >= 50 %}text-amber-400
+        {% elif p.covered_pct > 0 %}text-orange-400
+        {% else %}text-slate-700{% endif %}">
+        {% if p.total > 0 %}{{ p.covered_pct }}%{% else %}—{% endif %}
+      </div>
+
+      <!-- Total -->
+      <div class="col-span-2 text-right font-mono text-xs text-slate-600">
+        {{ p.total }}
+      </div>
+
+    </div>
+    {% endfor %}
+
+  </div>
+  {% else %}
+  <div class="stat-card p-12 text-center text-slate-600 text-sm">
+    No declaration data yet.
+  </div>
+  {% endif %}
+
+  <!-- Blind spot callout -->
+  {% if heatmap %}
+  {% set blind_spots = heatmap | selectattr('covered_pct', 'lt', 50) | list %}
+  {% if blind_spots %}
+  <div class="mt-4 p-4 rounded-lg" style="background:rgba(251,191,36,0.06);border:1px solid rgba(251,191,36,0.15)">
+    <p class="text-amber-400 text-xs font-mono font-semibold uppercase tracking-wider mb-1">Ecosystem blind spots</p>
+    <p class="text-slate-400 text-xs">
+      Fewer than half of agents cover:
+      {% for p in blind_spots %}
+      <span class="font-mono text-amber-300">{{ p.id }} {{ p.name }}</span>{% if not loop.last %}, {% endif %}
+      {% endfor %}.
+      These are under-committed principles across the network.
+    </p>
+  </div>
+  {% endif %}
+  {% endif %}
+
+</div>
+
+{% endblock %}

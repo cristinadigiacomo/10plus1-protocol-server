@@ -1,0 +1,119 @@
+{% extends "base.html" %}
+{% block title %}Activity{% endblock %}
+
+{% block content %}
+
+<div class="mb-6 flex items-center justify-between">
+  <div>
+    <h1 class="text-xl font-semibold text-slate-100">Activity Feed</h1>
+    <p class="text-slate-500 text-sm mt-1">Protocol events across the network — newest first</p>
+  </div>
+  <div class="text-xs font-mono text-slate-500 flex items-center gap-2"
+       x-data="{ lastUpdate: null }"
+       x-init="setInterval(() => { lastUpdate = new Date().toLocaleTimeString(); }, 10000)">
+    <span class="live-dot text-emerald-500">●</span>
+    <span>live</span>
+    <span x-show="lastUpdate" x-text="'· ' + lastUpdate" x-cloak class="text-slate-600"></span>
+  </div>
+</div>
+
+<!-- Live feed table -->
+<div class="stat-card overflow-hidden"
+     x-data="{
+       events: {{ events | tojson }},
+       loading: false,
+       async refresh() {
+         this.loading = true;
+         try {
+           const r = await fetch('/api/events?n=50');
+           this.events = await r.json();
+         } finally { this.loading = false; }
+       }
+     }"
+     x-init="setInterval(() => refresh(), 10000)">
+
+  <!-- Table header -->
+  <div class="grid grid-cols-12 gap-2 px-5 py-3 text-xs font-mono text-slate-600 uppercase tracking-wider"
+       style="border-bottom:1px solid #1e293b">
+    <div class="col-span-2">Time</div>
+    <div class="col-span-1">Cat</div>
+    <div class="col-span-3">Agent</div>
+    <div class="col-span-3">Event</div>
+    <div class="col-span-2">Outcome</div>
+    <div class="col-span-1 text-right">ID</div>
+  </div>
+
+  <!-- Rows -->
+  <div>
+    <template x-for="(ev, i) in events" :key="i">
+      <div class="grid grid-cols-12 gap-2 px-5 py-2.5 text-xs transition-colors hover:bg-slate-800/40"
+           style="border-bottom:1px solid #0f172a">
+
+        <!-- Timestamp -->
+        <div class="col-span-2 font-mono text-slate-500 tabular-nums" x-text="ev.timestamp ? ev.timestamp.substring(11,19) : ''"></div>
+
+        <!-- Category badge -->
+        <div class="col-span-1">
+          <span class="font-mono text-xs"
+                :class="{
+                  'cat-declaration': ev.category === 'DECLARATION',
+                  'cat-disposition': ev.category === 'DISPOSITION',
+                  'cat-validation':  ev.category === 'VALIDATION',
+                  'cat-signing':     ev.category === 'SIGNING',
+                  'cat-server':      ev.category === 'SERVER'
+                }"
+                x-text="ev.category.substring(0,4)"></span>
+        </div>
+
+        <!-- Agent ID -->
+        <div class="col-span-3 font-mono text-slate-300 truncate" x-text="ev.agent_id"></div>
+
+        <!-- Event label -->
+        <div class="col-span-3 text-slate-400 truncate" x-text="ev.label"></div>
+
+        <!-- Outcome -->
+        <div class="col-span-2">
+          <template x-if="ev.outcome">
+            <span class="px-1.5 py-0.5 rounded text-xs font-mono"
+                  :class="{
+                    'mode-proceed': ev.outcome === 'PROCEED',
+                    'mode-reroute': ev.outcome === 'REROUTE',
+                    'mode-flag':    ev.outcome === 'COMPLETE_AND_FLAG',
+                    'mode-refuse':  ev.outcome === 'REFUSE'
+                  }"
+                  x-text="ev.outcome === 'COMPLETE_AND_FLAG' ? 'FLAG' : ev.outcome"></span>
+          </template>
+        </div>
+
+        <!-- Event ID -->
+        <div class="col-span-1 text-right font-mono text-slate-700" x-text="ev.event_id"></div>
+
+      </div>
+    </template>
+
+    <!-- Empty state -->
+    <template x-if="events.length === 0">
+      <div class="px-5 py-12 text-center text-slate-600 text-sm">
+        No protocol events recorded yet.
+      </div>
+    </template>
+  </div>
+
+  <!-- Loading indicator -->
+  <div x-show="loading" x-cloak class="px-5 py-2 text-xs font-mono text-slate-600 text-center"
+       style="border-top:1px solid #1e293b">
+    refreshing…
+  </div>
+
+</div>
+
+<!-- Legend -->
+<div class="mt-6 flex flex-wrap gap-4 text-xs font-mono text-slate-600">
+  <span><span class="cat-declaration">DECL</span> Declaration</span>
+  <span><span class="cat-disposition">DISP</span> Disposition</span>
+  <span><span class="cat-validation">VALI</span> Validation</span>
+  <span><span class="cat-signing">SIGN</span> Signing</span>
+  <span><span class="cat-server">SERV</span> Server</span>
+</div>
+
+{% endblock %}

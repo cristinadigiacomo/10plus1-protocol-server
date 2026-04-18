@@ -1,0 +1,145 @@
+{% extends "base.html" %}
+{% block title %}Overview{% endblock %}
+
+{% block content %}
+
+<!-- Page header -->
+<div class="mb-8">
+  <h1 class="text-xl font-semibold text-slate-100">Network Overview</h1>
+  <p class="text-slate-500 text-sm mt-1">
+    The trust layer of the AI internet — live protocol activity
+  </p>
+</div>
+
+<!-- Stat cards -->
+<div class="grid grid-cols-2 lg:grid-cols-4 gap-4 mb-8"
+     x-data="{ stats: {{ overview | tojson }} }"
+     x-init="setInterval(async () => { const r = await fetch('/api/overview'); stats = await r.json(); }, 30000)">
+
+  <div class="stat-card p-5">
+    <p class="text-slate-500 text-xs font-mono uppercase tracking-wider mb-2">Handshakes</p>
+    <p class="text-3xl font-bold text-slate-100 font-mono" x-text="stats.total_handshakes">{{ overview.total_handshakes }}</p>
+    <p class="text-xs text-slate-600 mt-1">
+      <span x-text="stats.pending_handshakes">{{ overview.pending_handshakes }}</span> pending
+    </p>
+  </div>
+
+  <div class="stat-card p-5">
+    <p class="text-slate-500 text-xs font-mono uppercase tracking-wider mb-2">Agents</p>
+    <p class="text-3xl font-bold text-slate-100 font-mono" x-text="stats.agent_count">{{ overview.agent_count }}</p>
+    <p class="text-xs text-slate-600 mt-1">declared posture</p>
+  </div>
+
+  <div class="stat-card p-5">
+    <p class="text-slate-500 text-xs font-mono uppercase tracking-wider mb-2">Declarations</p>
+    <p class="text-3xl font-bold text-slate-100 font-mono" x-text="stats.declaration_count">{{ overview.declaration_count }}</p>
+    <p class="text-xs text-slate-600 mt-1">on file</p>
+  </div>
+
+  <!-- ROR rate card -->
+  <div class="stat-card p-5">
+    <p class="text-slate-500 text-xs font-mono uppercase tracking-wider mb-2">ROR Rate</p>
+    <p class="text-3xl font-bold font-mono"
+       :class="{
+         'text-emerald-400': stats.ror_status === 'green',
+         'text-amber-400':   stats.ror_status === 'amber',
+         'text-red-400':     stats.ror_status === 'red'
+       }"
+       x-text="stats.ror_pct">{{ overview.ror_pct }}</p>
+    <p class="text-xs mt-1"
+       :class="{
+         'text-emerald-600': stats.ror_status === 'green',
+         'text-amber-600':   stats.ror_status === 'amber',
+         'text-red-600':     stats.ror_status === 'red'
+       }"
+       x-text="stats.ror_status === 'green' ? 'healthy' : stats.ror_status === 'amber' ? 'elevated' : 'high'">
+      {% if overview.ror_status == 'green' %}healthy{% elif overview.ror_status == 'amber' %}elevated{% else %}high{% endif %}
+    </p>
+  </div>
+
+</div>
+
+<!-- Two-column: disposition breakdown + recent activity -->
+<div class="grid grid-cols-1 lg:grid-cols-2 gap-6">
+
+  <!-- Disposition breakdown -->
+  <div class="stat-card p-6">
+    <h2 class="text-sm font-semibold text-slate-300 mb-5 uppercase tracking-wider font-mono">
+      Disposition Breakdown
+    </h2>
+    {% set total_disp = (overview.disposition_counts.PROCEED +
+                         overview.disposition_counts.REROUTE +
+                         overview.disposition_counts.COMPLETE_AND_FLAG +
+                         overview.disposition_counts.REFUSE) %}
+    {% for mode, color, label in [
+        ('PROCEED',          'emerald', 'PROCEED'),
+        ('REROUTE',          'amber',   'REROUTE'),
+        ('COMPLETE_AND_FLAG','orange',  'COMPLETE &amp; FLAG'),
+        ('REFUSE',           'red',     'REFUSE'),
+    ] %}
+    {% set count = overview.disposition_counts[mode] %}
+    {% set pct = (count / total_disp * 100) | round | int if total_disp > 0 else 0 %}
+    <div class="flex items-center gap-3 mb-3 last:mb-0">
+      <span class="w-28 text-xs font-mono
+        {% if color == 'emerald' %}text-emerald-400
+        {% elif color == 'amber' %}text-amber-400
+        {% elif color == 'orange' %}text-orange-400
+        {% else %}text-red-400{% endif %}">
+        {{ label }}
+      </span>
+      <div class="flex-1 bg-slate-800 rounded-full h-1.5">
+        <div class="h-1.5 rounded-full
+          {% if color == 'emerald' %}bg-emerald-500
+          {% elif color == 'amber' %}bg-amber-500
+          {% elif color == 'orange' %}bg-orange-500
+          {% else %}bg-red-500{% endif %}"
+             style="width: {{ pct }}%"></div>
+      </div>
+      <span class="w-6 text-right text-sm font-mono text-slate-300">{{ count }}</span>
+      <span class="w-8 text-right text-xs font-mono text-slate-600">{{ pct }}%</span>
+    </div>
+    {% endfor %}
+    {% if total_disp == 0 %}
+    <p class="text-slate-600 text-xs mt-2">No dispositions yet.</p>
+    {% endif %}
+  </div>
+
+  <!-- Recent activity -->
+  <div class="stat-card p-6">
+    <div class="flex items-center justify-between mb-5">
+      <h2 class="text-sm font-semibold text-slate-300 uppercase tracking-wider font-mono">
+        Recent Activity
+      </h2>
+      <a href="/activity" class="text-xs text-violet-400 hover:text-violet-300">View all →</a>
+    </div>
+
+    {% if recent %}
+    <div class="space-y-3">
+      {% for ev in recent %}
+      <div class="flex items-start gap-3 text-xs">
+        <span class="font-mono text-slate-600 shrink-0 mt-0.5">
+          {{ ev.timestamp[11:19] if ev.timestamp else '' }}
+        </span>
+        <div class="flex-1 min-w-0">
+          <span class="font-mono text-slate-300 truncate block">{{ ev.agent_id }}</span>
+          <span class="cat-{{ ev.category | lower }}">{{ ev.label }}</span>
+        </div>
+        {% if ev.outcome %}
+        <span class="shrink-0 px-1.5 py-0.5 rounded text-xs font-mono
+          {% if ev.outcome == 'PROCEED' %}mode-proceed
+          {% elif ev.outcome == 'REROUTE' %}mode-reroute
+          {% elif ev.outcome == 'COMPLETE_AND_FLAG' %}mode-flag
+          {% else %}mode-refuse{% endif %}">
+          {{ ev.outcome }}
+        </span>
+        {% endif %}
+      </div>
+      {% endfor %}
+    </div>
+    {% else %}
+    <p class="text-slate-600 text-xs">No activity recorded yet.</p>
+    {% endif %}
+  </div>
+
+</div>
+{% endblock %}

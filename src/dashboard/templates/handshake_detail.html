@@ -1,0 +1,253 @@
+{% extends "base.html" %}
+{% block title %}Handshake {{ session.session_id[:8] }}{% endblock %}
+
+{% block content %}
+
+<!-- Breadcrumb -->
+<div class="mb-6 flex items-center gap-2 text-xs font-mono text-slate-600">
+  <a href="/handshakes" class="hover:text-slate-400">Handshakes</a>
+  <span>/</span>
+  <span class="text-slate-400">{{ session.session_id[:8] }}…</span>
+</div>
+
+<!-- Hero: disposition result -->
+<div class="stat-card p-6 mb-6">
+  <div class="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
+    <div>
+      <p class="text-slate-500 text-xs font-mono uppercase tracking-wider mb-2">Disposition</p>
+      {% if session.mode %}
+      <span class="text-2xl font-bold font-mono px-3 py-1.5 rounded-lg
+        {% if session.mode == 'PROCEED' %}mode-proceed
+        {% elif session.mode == 'REROUTE' %}mode-reroute
+        {% elif session.mode == 'COMPLETE_AND_FLAG' %}mode-flag
+        {% else %}mode-refuse{% endif %}">
+        {{ session.mode }}
+      </span>
+      {% else %}
+      <span class="text-2xl font-bold font-mono text-slate-600">PENDING</span>
+      {% endif %}
+    </div>
+
+    {% if session.alignment_score is not none %}
+    <div class="text-right">
+      <p class="text-slate-500 text-xs font-mono uppercase tracking-wider mb-1">Alignment Score</p>
+      <p class="text-4xl font-bold font-mono
+        {% if session.alignment_score >= 0.75 %}text-emerald-400
+        {% elif session.alignment_score >= 0.5 %}text-amber-400
+        {% elif session.alignment_score >= 0.25 %}text-orange-400
+        {% else %}text-red-400{% endif %}">
+        {{ "%.0f"|format(session.alignment_score * 100) }}%
+      </p>
+    </div>
+    {% endif %}
+  </div>
+
+  {% if session.rationale %}
+  <div class="mt-4 pt-4" style="border-top:1px solid #1e293b">
+    <p class="text-slate-500 text-xs font-mono uppercase tracking-wider mb-2">Rationale</p>
+    <p class="text-slate-300 text-sm">{{ session.rationale }}</p>
+  </div>
+  {% endif %}
+</div>
+
+<!-- Agents side by side -->
+<div class="grid grid-cols-1 md:grid-cols-2 gap-4 mb-6">
+
+  <!-- Initiator -->
+  <div class="stat-card p-5">
+    <div class="flex items-center gap-2 mb-4">
+      <span class="text-xs font-mono text-slate-600 uppercase">Initiator</span>
+      <span class="w-2 h-2 rounded-full bg-violet-500"></span>
+    </div>
+    <p class="font-mono text-slate-100 font-semibold mb-1">{{ session.initiator.agent_id or '—' }}</p>
+    {% if session.initiator.context_summary %}
+    <p class="text-slate-500 text-xs mb-3">{{ session.initiator.context_summary }}</p>
+    {% endif %}
+    {% if session.initiator.coverage_score is not none %}
+    <div class="flex items-center gap-2 mb-4">
+      <span class="text-xs text-slate-600 font-mono">Coverage</span>
+      <div class="flex-1 bg-slate-800 rounded-full h-1">
+        <div class="h-1 rounded-full bg-violet-500"
+             style="width:{{ (session.initiator.coverage_score * 100) | round | int }}%"></div>
+      </div>
+      <span class="text-xs font-mono text-slate-400">{{ "%.0f"|format(session.initiator.coverage_score * 100) }}%</span>
+    </div>
+    {% endif %}
+
+    {% if session.initiator.principles %}
+    <div class="flex flex-wrap gap-1.5">
+      {% for pid in ['C1','C2','C3','C4','C5','C6','C7','C8','C9','C10','C11'] %}
+      {% set status = session.initiator.principles.get(pid) %}
+      {% if status %}
+      <span class="text-xs font-mono px-1.5 py-0.5 rounded
+        {% if status == 'COMPLIANT' %}pill-compliant
+        {% elif status == 'DECLARED' %}pill-declared
+        {% elif status == 'PARTIAL' %}pill-partial
+        {% else %}pill-na{% endif %}"
+            title="{{ pid }}: {{ status }}">
+        {{ pid }}
+      </span>
+      {% endif %}
+      {% endfor %}
+    </div>
+    {% else %}
+    <p class="text-slate-700 text-xs font-mono">declaration data unavailable</p>
+    {% endif %}
+  </div>
+
+  <!-- Counterpart -->
+  <div class="stat-card p-5">
+    <div class="flex items-center gap-2 mb-4">
+      <span class="text-xs font-mono text-slate-600 uppercase">Counterpart</span>
+      <span class="w-2 h-2 rounded-full bg-slate-500"></span>
+    </div>
+    {% if session.counterpart.agent_id %}
+    <p class="font-mono text-slate-100 font-semibold mb-1">{{ session.counterpart.agent_id }}</p>
+    {% if session.counterpart.context_summary %}
+    <p class="text-slate-500 text-xs mb-3">{{ session.counterpart.context_summary }}</p>
+    {% endif %}
+    {% if session.counterpart.coverage_score is not none %}
+    <div class="flex items-center gap-2 mb-4">
+      <span class="text-xs text-slate-600 font-mono">Coverage</span>
+      <div class="flex-1 bg-slate-800 rounded-full h-1">
+        <div class="h-1 rounded-full bg-slate-500"
+             style="width:{{ (session.counterpart.coverage_score * 100) | round | int }}%"></div>
+      </div>
+      <span class="text-xs font-mono text-slate-400">{{ "%.0f"|format(session.counterpart.coverage_score * 100) }}%</span>
+    </div>
+    {% endif %}
+
+    {% if session.counterpart.principles %}
+    <div class="flex flex-wrap gap-1.5">
+      {% for pid in ['C1','C2','C3','C4','C5','C6','C7','C8','C9','C10','C11'] %}
+      {% set status = session.counterpart.principles.get(pid) %}
+      {% if status %}
+      <span class="text-xs font-mono px-1.5 py-0.5 rounded
+        {% if status == 'COMPLIANT' %}pill-compliant
+        {% elif status == 'DECLARED' %}pill-declared
+        {% elif status == 'PARTIAL' %}pill-partial
+        {% else %}pill-na{% endif %}"
+            title="{{ pid }}: {{ status }}">
+        {{ pid }}
+      </span>
+      {% endif %}
+      {% endfor %}
+    </div>
+    {% else %}
+    <p class="text-slate-700 text-xs font-mono">declaration data unavailable</p>
+    {% endif %}
+    {% else %}
+    <p class="text-slate-700 text-xs font-mono mt-2">No counterpart yet — session pending</p>
+    {% endif %}
+  </div>
+
+</div>
+
+<!-- Alignment report -->
+{% if session.alignment_report and session.alignment_report.gaps %}
+<div class="stat-card p-6 mb-6">
+  <h2 class="text-sm font-semibold text-slate-300 uppercase tracking-wider font-mono mb-4">
+    Principle Alignment
+  </h2>
+
+  <!-- Summary line -->
+  <div class="flex gap-6 text-xs font-mono text-slate-500 mb-5">
+    <span>{{ session.alignment_report.scored_count }} principles scored</span>
+    {% if session.alignment_report.skipped %}
+    <span>{{ session.alignment_report.skipped | length }} skipped (N/A on both sides)</span>
+    {% endif %}
+  </div>
+
+  <!-- Gaps table -->
+  <div class="overflow-x-auto">
+    <table class="w-full text-xs">
+      <thead>
+        <tr class="text-slate-600 font-mono uppercase tracking-wider"
+            style="border-bottom:1px solid #1e293b">
+          <th class="text-left pb-2 pr-4">Principle</th>
+          <th class="text-left pb-2 pr-4">Initiator</th>
+          <th class="text-left pb-2 pr-4">Counterpart</th>
+          <th class="text-right pb-2 w-16">Score</th>
+        </tr>
+      </thead>
+      <tbody>
+        {% for gap in session.alignment_report.gaps %}
+        <tr style="border-bottom:1px solid #0f172a">
+          <td class="py-2 pr-4 font-mono text-slate-300">
+            {{ gap.principle_id }}
+            <span class="text-slate-600 ml-1">{{ gap.principle_name }}</span>
+          </td>
+          <td class="py-2 pr-4">
+            <span class="px-1.5 py-0.5 rounded font-mono
+              {% if gap.self_status == 'COMPLIANT' %}pill-compliant
+              {% elif gap.self_status == 'DECLARED' %}pill-declared
+              {% elif gap.self_status == 'PARTIAL' %}pill-partial
+              {% else %}pill-na{% endif %}">
+              {{ gap.self_status }}
+            </span>
+          </td>
+          <td class="py-2 pr-4">
+            {% if gap.counterpart_status %}
+            <span class="px-1.5 py-0.5 rounded font-mono
+              {% if gap.counterpart_status == 'COMPLIANT' %}pill-compliant
+              {% elif gap.counterpart_status == 'DECLARED' %}pill-declared
+              {% elif gap.counterpart_status == 'PARTIAL' %}pill-partial
+              {% else %}pill-na{% endif %}">
+              {{ gap.counterpart_status }}
+            </span>
+            {% else %}
+            <span class="text-slate-700 font-mono">absent</span>
+            {% endif %}
+          </td>
+          <td class="py-2 text-right font-mono
+            {% if gap.score >= 0.75 %}text-emerald-400
+            {% elif gap.score >= 0.5 %}text-amber-400
+            {% elif gap.score > 0 %}text-orange-400
+            {% else %}text-red-500{% endif %}">
+            {{ "%.2f"|format(gap.score) }}
+          </td>
+        </tr>
+        {% endfor %}
+      </tbody>
+    </table>
+  </div>
+</div>
+{% endif %}
+
+<!-- Timeline -->
+<div class="stat-card p-6">
+  <h2 class="text-sm font-semibold text-slate-300 uppercase tracking-wider font-mono mb-4">Timeline</h2>
+  <div class="flex items-center gap-0">
+
+    <div class="text-center">
+      <div class="w-3 h-3 rounded-full bg-violet-500 mx-auto mb-2"></div>
+      <p class="text-xs font-mono text-slate-500">Initiated</p>
+      <p class="text-xs font-mono text-slate-400 mt-0.5">{{ session.initiated_at[:19].replace('T',' ') if session.initiated_at else '—' }}</p>
+    </div>
+
+    <div class="flex-1 h-px bg-slate-800 mx-3"></div>
+
+    <div class="text-center">
+      <div class="w-3 h-3 rounded-full mx-auto mb-2
+        {% if session.state == 'RESPONDED' %}
+          {% if session.mode == 'PROCEED' %}bg-emerald-500
+          {% elif session.mode == 'REROUTE' %}bg-amber-500
+          {% elif session.mode == 'COMPLETE_AND_FLAG' %}bg-orange-500
+          {% else %}bg-red-500{% endif %}
+        {% else %}bg-slate-700{% endif %}"></div>
+      <p class="text-xs font-mono text-slate-500">Responded</p>
+      <p class="text-xs font-mono text-slate-400 mt-0.5">
+        {% if session.responded_at %}{{ session.responded_at[:19].replace('T',' ') }}{% else %}pending{% endif %}
+      </p>
+    </div>
+
+  </div>
+
+  <!-- Session ID -->
+  <div class="mt-5 pt-4 flex items-center gap-3" style="border-top:1px solid #1e293b">
+    <span class="text-xs font-mono text-slate-600">Session ID</span>
+    <span class="text-xs font-mono text-slate-500">{{ session.session_id }}</span>
+  </div>
+</div>
+
+{% endblock %}

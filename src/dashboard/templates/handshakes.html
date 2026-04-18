@@ -1,0 +1,96 @@
+{% extends "base.html" %}
+{% block title %}Handshakes{% endblock %}
+
+{% block content %}
+
+<div class="mb-6">
+  <h1 class="text-xl font-semibold text-slate-100">Handshake Explorer</h1>
+  <p class="text-slate-500 text-sm mt-1">
+    Every recorded protocol exchange — click a row to inspect the full session
+  </p>
+</div>
+
+<div class="stat-card overflow-hidden">
+
+  <!-- Header -->
+  <div class="grid grid-cols-12 gap-2 px-5 py-3 text-xs font-mono text-slate-600 uppercase tracking-wider"
+       style="border-bottom:1px solid #1e293b">
+    <div class="col-span-2">Session</div>
+    <div class="col-span-3">Initiator</div>
+    <div class="col-span-3">Counterpart</div>
+    <div class="col-span-2">Disposition</div>
+    <div class="col-span-1 text-right">Score</div>
+    <div class="col-span-1 text-right">Time</div>
+  </div>
+
+  {% if handshakes %}
+  {% for h in handshakes %}
+  <a href="/handshakes/{{ h.session_id }}"
+     class="grid grid-cols-12 gap-2 px-5 py-3 text-xs transition-colors hover:bg-slate-800/40 block"
+     style="border-bottom:1px solid #0f172a">
+
+    <!-- Session ID (short) -->
+    <div class="col-span-2 font-mono text-slate-500">{{ h.session_id[:8] }}…</div>
+
+    <!-- Initiator -->
+    <div class="col-span-3 font-mono text-slate-300 truncate">{{ h.initiator_id or '—' }}</div>
+
+    <!-- Counterpart -->
+    <div class="col-span-3 font-mono text-slate-400 truncate">
+      {% if h.counterpart_id %}{{ h.counterpart_id }}{% else %}<span class="text-slate-700">awaiting…</span>{% endif %}
+    </div>
+
+    <!-- Disposition badge -->
+    <div class="col-span-2">
+      {% if h.mode %}
+      <span class="px-2 py-0.5 rounded font-mono
+        {% if h.mode == 'PROCEED' %}mode-proceed
+        {% elif h.mode == 'REROUTE' %}mode-reroute
+        {% elif h.mode == 'COMPLETE_AND_FLAG' %}mode-flag
+        {% elif h.mode == 'REFUSE' %}mode-refuse
+        {% endif %}">
+        {% if h.mode == 'COMPLETE_AND_FLAG' %}FLAG{% else %}{{ h.mode }}{% endif %}
+      </span>
+      {% else %}
+      <span class="text-slate-700 font-mono">PENDING</span>
+      {% endif %}
+    </div>
+
+    <!-- Alignment score -->
+    <div class="col-span-1 text-right font-mono
+      {% if h.alignment_score is not none %}
+        {% if h.alignment_score >= 0.75 %}text-emerald-400
+        {% elif h.alignment_score >= 0.5 %}text-amber-400
+        {% elif h.alignment_score >= 0.25 %}text-orange-400
+        {% else %}text-red-400{% endif %}
+      {% else %}text-slate-700{% endif %}">
+      {% if h.alignment_score is not none %}{{ "%.0f"|format(h.alignment_score * 100) }}%{% else %}—{% endif %}
+    </div>
+
+    <!-- Timestamp -->
+    <div class="col-span-1 text-right font-mono text-slate-600">
+      {{ (h.responded_at or h.initiated_at or '')[:10] }}
+    </div>
+
+  </a>
+  {% endfor %}
+  {% else %}
+  <div class="px-5 py-12 text-center text-slate-600 text-sm">
+    No handshakes recorded yet.
+  </div>
+  {% endif %}
+
+</div>
+
+<!-- Summary counts -->
+{% if handshakes %}
+{% set responded = handshakes | selectattr('state', 'equalto', 'RESPONDED') | list %}
+{% set pending   = handshakes | selectattr('state', 'equalto', 'INITIATED') | list %}
+<div class="mt-4 flex gap-6 text-xs font-mono text-slate-600">
+  <span>{{ handshakes | length }} total</span>
+  <span class="text-slate-400">{{ responded | length }} completed</span>
+  <span>{{ pending | length }} pending</span>
+</div>
+{% endif %}
+
+{% endblock %}
