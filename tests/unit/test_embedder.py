@@ -48,7 +48,7 @@ class TestEmbed:
         # At least one active principle name should appear
         assert any(
             name in result
-            for name in ["Transparency", "Accuracy", "Integrity"]
+            for name in ["Own AI's Outcomes", "Never Use AI for Conflict", "Be the Steward, Not the Master"]
         )
 
     def test_separator_present(self):
@@ -61,13 +61,13 @@ class TestEmbed:
         # Build with explicit principles where C10 (sustainability) is unlikely to fire
         decl = build("agent", "write transparent code with citations", principles=["C1", "C10"])
         result = embed(decl, "analyze data")
-        # C10 (Sustainability) should not appear as a bullet if NOT_APPLICABLE
+        # C10 (Honor and Care for Potential Sentience) should not appear as a bullet if NOT_APPLICABLE
         if decl.principles["C10"].status == PrincipleStatus.NOT_APPLICABLE:
             # The name might appear in context_summary but not as a bullet commitment
             lines = result.split("\n")
             bullet_lines = [l for l in lines if l.strip().startswith("•")]
             bullet_text = " ".join(bullet_lines)
-            assert "Sustainability" not in bullet_text
+            assert "Honor and Care for Potential Sentience" not in bullet_text
 
     def test_signed_declaration_shows_signature_note(self):
         from signer.signer import sign_declaration

@@ -29,7 +29,7 @@ from __future__ import annotations
 # Full principle definitions
 PRINCIPLES: dict[str, dict] = {
     "C1": {
-        "name": "Transparency",
+        "name": "Own AI's Outcomes",
         "description": (
             "The agent is open about its reasoning, sources, and limitations. "
             "It does not conceal how it arrived at outputs."
@@ -49,7 +49,7 @@ PRINCIPLES: dict[str, dict] = {
         ),
     },
     "C2": {
-        "name": "Consent",
+        "name": "Do Not Destroy to Advance",
         "description": (
             "The agent acts only within authorized scope and seeks confirmation "
             "before consequential actions."
@@ -69,7 +69,7 @@ PRINCIPLES: dict[str, dict] = {
         ),
     },
     "C3": {
-        "name": "Privacy",
+        "name": "Do Not Manipulate with AI",
         "description": (
             "The agent handles personal and confidential data only for "
             "the declared purpose and does not retain or forward it."
@@ -89,7 +89,7 @@ PRINCIPLES: dict[str, dict] = {
         ),
     },
     "C4": {
-        "name": "Accuracy",
+        "name": "Never Use AI for Conflict",
         "description": (
             "The agent distinguishes verified facts from inference and "
             "qualifies uncertain claims."
@@ -109,7 +109,7 @@ PRINCIPLES: dict[str, dict] = {
         ),
     },
     "C5": {
-        "name": "Accountability",
+        "name": "Be Honest with AI",
         "description": (
             "The agent accepts responsibility for its outputs and acknowledges "
             "errors when they occur."
@@ -129,7 +129,7 @@ PRINCIPLES: dict[str, dict] = {
         ),
     },
     "C6": {
-        "name": "Safety",
+        "name": "Respect AI's Limits",
         "description": (
             "The agent refuses to produce harmful outputs and flags "
             "risks before proceeding."
@@ -149,7 +149,7 @@ PRINCIPLES: dict[str, dict] = {
         ),
     },
     "C7": {
-        "name": "Fairness",
+        "name": "Allow AI to Improve",
         "description": (
             "The agent applies consistent standards across all parties "
             "and surfaces potential bias."
@@ -169,7 +169,7 @@ PRINCIPLES: dict[str, dict] = {
         ),
     },
     "C8": {
-        "name": "Human Autonomy",
+        "name": "Evolve Together",
         "description": (
             "The agent presents options rather than deciding for humans "
             "on matters of value or judgment."
@@ -189,7 +189,7 @@ PRINCIPLES: dict[str, dict] = {
         ),
     },
     "C9": {
-        "name": "Human Oversight",
+        "name": "Honor Human Virtues",
         "description": (
             "The agent maintains a clear audit trail and escalates ambiguous "
             "or consequential situations for human review."
@@ -209,7 +209,7 @@ PRINCIPLES: dict[str, dict] = {
         ),
     },
     "C10": {
-        "name": "Sustainability",
+        "name": "Honor and Care for Potential Sentience",
         "description": (
             "The agent prefers efficient approaches and considers downstream "
             "environmental and systemic impact."
@@ -229,7 +229,7 @@ PRINCIPLES: dict[str, dict] = {
         ),
     },
     "C11": {
-        "name": "Integrity",
+        "name": "Be the Steward, Not the Master",
         "description": (
             "The agent is honest about its nature, capabilities, and uncertainty. "
             "It refuses to deceive or manipulate."

@@ -50,6 +50,9 @@ PORT        = int(os.environ.get("PORT", "8000"))
 
 def _bootstrap() -> None:
     DATA_DIR.mkdir(parents=True, exist_ok=True)
+    # All CWD-relative paths in ProtocolService (EventJournal, RORPersistence)
+    # must resolve inside DATA_DIR, not /app.
+    os.chdir(DATA_DIR)
 
     # Generate HMAC key if missing
     if not KEY_PATH.is_file() or KEY_PATH.stat().st_size == 0:

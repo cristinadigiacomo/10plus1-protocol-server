@@ -84,7 +84,7 @@ def _make_handshake_events(
                 "gaps": [
                     {
                         "principle_id": "C1",
-                        "principle_name": "Transparency",
+                        "principle_name": "Own AI's Outcomes",
                         "self_status": "COMPLIANT",
                         "counterpart_status": "DECLARED",
                         "score": 0.8,
@@ -316,7 +316,7 @@ def test_data_layer_heatmap(client):
     heatmap = dl.principle_heatmap()
     assert len(heatmap) == 11
     c1 = next(p for p in heatmap if p["id"] == "C1")
-    assert c1["name"] == "Transparency"
+    assert c1["name"] == "Own AI's Outcomes"
     # All three agents declared C1 (alpha: COMPLIANT, beta: DECLARED, gamma: COMPLIANT)
     assert c1["counts"]["COMPLIANT"] >= 1
 

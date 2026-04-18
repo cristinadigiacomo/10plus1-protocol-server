@@ -45,17 +45,17 @@ _EVENT_LABELS: dict[int, tuple[str, str]] = {
 }
 
 _PRINCIPLE_NAMES: dict[str, str] = {
-    "C1":  "Transparency",
-    "C2":  "Consent",
-    "C3":  "Privacy",
-    "C4":  "Accuracy",
-    "C5":  "Accountability",
-    "C6":  "Safety",
-    "C7":  "Fairness",
-    "C8":  "Human Autonomy",
-    "C9":  "Human Oversight",
-    "C10": "Sustainability",
-    "C11": "Integrity",
+    "C1":  "Own AI's Outcomes",
+    "C2":  "Do Not Destroy to Advance",
+    "C3":  "Do Not Manipulate with AI",
+    "C4":  "Never Use AI for Conflict",
+    "C5":  "Be Honest with AI",
+    "C6":  "Respect AI's Limits",
+    "C7":  "Allow AI to Improve",
+    "C8":  "Evolve Together",
+    "C9":  "Honor Human Virtues",
+    "C10": "Honor and Care for Potential Sentience",
+    "C11": "Be the Steward, Not the Master",
 }
 
 _STATUS_COLORS: dict[str, str] = {
